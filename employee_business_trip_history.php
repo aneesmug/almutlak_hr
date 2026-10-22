@@ -101,7 +101,7 @@ if (!$rows) {
         if (!in_array($status, ['rejected', 'completed', 'cancelled'], true)) {
             $menu[] = '<div class="dropdown-divider"></div><button type="button" class="dropdown-item text-danger" onclick="cancelBusinessTripRequest(' . sr_h(json_encode((string)$trip['request_inv_no'])) . ')"><i class="mdi mdi-close"></i> ' . sr_h(__('cancel_request', 'Cancel Request')) . '</button>';
         }
-        $primary = '<a class="sr-open-btn" href="business_trip_report_details.php?id=' . (int)$trip['id'] . '&emp_id=' . urlencode((string)($trip['emp_id'] ?? $emp_id)) . '" target="_blank"><i class="mdi mdi-eye"></i> ' . sr_h(__('view_report', 'View Report')) . '</a>';
+        $primary = '<a class="sr-open-btn" href="request_report.php?type=business_trip&id=' . (int)$trip['id'] . '&emp_id=' . urlencode((string)($trip['emp_id'] ?? $emp_id)) . '" target="_blank"><i class="mdi mdi-eye"></i> ' . sr_h(__('view_report', 'View Report')) . '</a>';
 
         $body .= '<tr>'
             . '<td><span class="sr-mono">' . sr_h($trip['request_inv_no']) . '</span><span class="sr-cell-sub">' . sr_h(__($trip['trip_type'] ?? 'domestic')) . '</span></td>'

@@ -11,6 +11,7 @@
 
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
+require_once __DIR__ . '/includes/approval_steps.php'; // approval chain stepper (shared with loan_report_details.php)
 
 // Restrict access: Employees cannot view this detailed report page
 // if (isset($isEmployee) && $isEmployee === true) {
@@ -513,6 +514,7 @@ if (mysqli_num_rows($query) == 1) {
           $chain_sql = "SELECT ra.*, 
                        e.name AS approver_name, 
                        e.emp_id AS approver_emp_id, 
+                       e.avatar AS approver_avatar, e.sex AS approver_sex,
                        al.user_type AS approver_role,
                        d2.dep_nme AS approver_dept_name
                    FROM request_approvers ra
@@ -1233,117 +1235,21 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
 
                                 <div class="row" id="approvalStatusContainer" style="display: none;">
-                                    <div class="col-md-8">
-                                        <div class="report-section">
-                                            <h5 class="section-title"><i class="fa fa-tasks"></i><?= __('approval_status') ?></h5>
-                                            <div class="approval-timeline">
-                                                <?php if ($is_cancelled_by_employee): ?>
-                                                    <div class="timeline-item cancelled">
-                                                        <div class="icon"><i class="fa fa-ban"></i></div>
-                                                        <span class="status ml-3"><strong><?= $cancelled_by_label ?></strong></span>
-                                                    </div>
-                                                    <div class="alert alert-secondary mt-3 mb-0">
-                                                        <i class="fa fa-info-circle"></i>
-                                                        <?php if ($cancelled_by_someone_else): ?>
-                                                            No active approvers. This request was cancelled on the employee's behalf.
-                                                        <?php else: ?>
-                                                            No active approvers. This request was cancelled by the employee.
-                                                        <?php endif; ?>
-                                                    </div>
-                                                <?php elseif ($current_status == 'rejected'): ?>
-                                                    <div class="timeline-item rejected">
-                                                        <div class="icon"><i class="fa fa-times-circle"></i></div>
-                                                        <span class="status ml-3"><strong><?= __('request_rejected') ?></strong></span>
-                                                    </div>
-                                                <?php elseif ($current_status == 'approved'): ?>
-                                                    <div class="timeline-item approved">
-                                                        <div class="icon"><i class="fa fa-check-circle"></i></div>
-                                                        <span class="status ml-3"><strong><?= __('request_approved') ?></strong></span>
-                                                    </div>
-                                                    <?php if (!empty($approval_chain)): ?>
-                                                        <div class="approval-flat-list mt-3">
-                                                            <?php foreach ($approval_chain as $approver): ?>
-                                                                <?php if ($approver['status'] == 'approved'): ?>
-                                                                    <?php
-                                                                    $role_icon = 'fa-user';
-                                                                    if (!empty($approver['approver_role']) && stripos($approver['approver_role'], 'hr') !== false) {
-                                                                        $role_icon = 'fa-user-shield';
-                                                                    } elseif (!empty($approver['approver_role']) && (stripos($approver['approver_role'], 'manager') !== false || stripos($approver['approver_role'], 'administrator') !== false || stripos($approver['approver_role'], 'gm') !== false)) {
-                                                                        $role_icon = 'fa-user-tie';
-                                                                    }
-                                                                    $level_scope = !empty($approver['approver_dept_name']) ? getDisplayName($approver['approver_dept_name']) : getRoleLabel($approver['approver_role']);
-                                                                    ?>
-                                                                    <div class="approval-flat-item">
-                                                                        <i class="fa <?= $role_icon ?> text-success"></i>
-                                                                        <strong><?= getDisplayName($approver['approver_name']) ?></strong>
-                                                                        <small class="text-muted">(<?= __('level') ?> <?= (int)($approver['approval_level'] ?? 0) ?><?= $level_scope !== '' ? ': ' . htmlspecialchars((string)$level_scope) : '' ?>)</small>
-                                                                    </div>
-                                                                <?php endif; ?>
-                                                            <?php endforeach; ?>
-                                                        </div>
-                                                    <?php endif; ?>
-                                                <?php elseif (!empty($approval_chain)): ?>
-                                                    <?php // NEW SYSTEM: Show approval chain ?>
-                                                    <?php 
-                                                        // Check if request was rejected
-                                                        $is_vacation_rejected = isset($request['status']) && $request['status'] === 'rejected';
-                                                    ?>
-                                                    <div class="approval-flat-list">
-                                                    <?php foreach ($approval_chain as $index => $approver):
-                                                        // If request is rejected, skip pending/awaiting approvers
-                                                        if ($is_vacation_rejected && in_array($approver['status'], ['pending', 'awaiting'])) {
-                                                            continue;
-                                                        }
-
-                                                        $status_color = 'text-muted';
-                                                        if ($approver['status'] == 'approved') $status_color = 'text-success';
-                                                        elseif ($approver['status'] == 'rejected') $status_color = 'text-danger';
-                                                        elseif ($approver['status'] == 'pending') $status_color = 'text-warning';
-
-                                                        $role_icon = 'fa-user';
-                                                        if (!empty($approver['approver_role']) && stripos($approver['approver_role'], 'hr') !== false) {
-                                                            $role_icon = 'fa-user-shield';
-                                                        } elseif (!empty($approver['approver_role']) && (stripos($approver['approver_role'], 'manager') !== false || stripos($approver['approver_role'], 'administrator') !== false || stripos($approver['approver_role'], 'gm') !== false)) {
-                                                            $role_icon = 'fa-user-tie';
-                                                        }
-
-                                                        $level_scope = !empty($approver['approver_dept_name']) ? getDisplayName($approver['approver_dept_name']) : getRoleLabel($approver['approver_role']);
-                                                    ?>
-                                                            <div class="approval-flat-item">
-                                                                <i class="fa <?= $role_icon ?> <?= $status_color ?>"></i>
-                                                                <strong><?= getDisplayName($approver['approver_name']) ?></strong>
-                                                                <small class="text-muted">(<?= __('level') ?> <?= (int)($approver['approval_level'] ?? 0) ?><?= $level_scope !== '' ? ': ' . htmlspecialchars((string)$level_scope) : '' ?>)</small>
-                                                                <?php if ($approver['status'] == 'rejected' && !empty($approver['note'])): ?>
-                                                                    <div class="approval-flat-note"><?= getDisplayName(htmlspecialchars((string)$approver['note'])) ?></div>
-                                                                <?php endif; ?>
-                                                            </div>
-                                                    <?php endforeach; ?>
-                                                    </div>
-                                                <?php else: ?>
-                                                    <?php // OLD SYSTEM or PENDING: Show simple status ?>
-                                                    <div class="timeline-item pending">
-                                                        <div class="icon"><i class="fa fa-clock"></i></div>
-                                                        <span class="status ml-3">
-                                                            <?php 
-                                                            // Check for old approval_status field
-                                                            if (isset($request['approval_status'])) {
-                                                                echo __('status') . ": " . htmlspecialchars(ucfirst(str_replace('_', ' ', $request['approval_status'])));
-                                                            } else {
-                                                                echo __('pending_approval');
-                                                            }
-                                                            ?>
-                                                        </span>
-                                                    </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
+                                    <div class="col-12 mb-3">
+                                        <?php
+                                        // Approval chain stepper (includes/approval_steps.php)
+                                        $vr_notice = $is_cancelled_by_employee
+                                            ? approval_steps_notice('slate', 'mdi-cancel', $cancelled_by_label . '<small>' . htmlspecialchars($cancelled_by_someone_else ? "No active approvers. This request was cancelled on the employee's behalf." : 'No active approvers. This request was cancelled by the employee.') . '</small>')
+                                            : '';
+                                        echo approval_steps_html(approval_steps_rows($approval_chain, (string)$current_status), (string)$current_status, $vr_notice);
+                                        ?>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-12">
                                         <?php if(!empty($request['remarks']) || !empty($request['note'])): ?>
                                         <div class="report-section">
                                              <h5 class="section-title"><i class="fa fa-comments"></i><?= __('remarks') ?></h5>
                                              <?php if($current_status == 'rejected'): ?>
-                                                <div class="alert alert-danger mb-0"><?=getDisplayName(nl2br(htmlspecialchars($request['note']))); ?></div>
+                                                <div class="alert alert-danger mb-0"><?=getDisplayName(nl2br(htmlspecialchars((string)($request['note'] ?? '')))); ?></div>
                                              <?php elseif(!empty($request['remarks'])): ?>
                                                 <div class="notes-section"><p class="mb-0"><?=getDisplayName(nl2br(htmlspecialchars($request['remarks']))); ?></p></div>
                                              <?php endif; ?>

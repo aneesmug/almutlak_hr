@@ -632,13 +632,13 @@ if ($canSeeAllDepts) {
                                                         <?php if ($is_pending_with_me): ?>
                                                             <a href="javascript:void(0);" class="sr-open-btn" onclick="approveSettlement(<?= $setl_id ?>, '<?= $inv_js ?>', <?= $settlement['emp_id'] ?>)"><i class="mdi mdi-check"></i> <?= __('approve') ?></a>
                                                         <?php else: ?>
-                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="viewSettlementDetails(<?= $setl_id ?>, '<?= $inv_js ?>')"><i class="mdi mdi-eye"></i> <?= __('view') ?></a>
+                                                            <a href="request_report.php?type=settlement&amp;id=<?= $setl_id ?>" target="_blank" class="sr-open-btn"><i class="mdi mdi-file-pdf"></i> <?= __('report') ?></a>
                                                         <?php endif; ?>
                                                         <div class="btn-group dropdown">
                                                             <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
                                                             <div class="dropdown-menu dropdown-menu-right">
                                                                 <?php if ($is_pending_with_me): ?>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="viewSettlementDetails(<?= $setl_id ?>, '<?= $inv_js ?>')"><i class="mdi mdi-eye"></i><?= __('view') ?></a>
+                                                                    <a class="dropdown-item" href="request_report.php?type=settlement&amp;id=<?= $setl_id ?>" target="_blank"><i class="mdi mdi-file-pdf"></i><?= __('report') ?></a>
                                                                 <?php endif; ?>
                                                                 <a class="dropdown-item" href="settlement_status_history.php?request_inv_no=<?= urlencode($settlement['request_inv_no']) ?>"><i class="mdi mdi-history"></i><?= __('history') ?></a>
                                                                 <?php if ($settlement['settlement_status'] === 'approved'): ?>

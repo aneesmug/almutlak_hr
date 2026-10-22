@@ -283,13 +283,6 @@ if ($can_see_all_depts) {
         .si-sum-tiles .is-date { background: var(--tone-indigo-bg); }
         .si-sum-tiles .is-date > span, .si-sum-tiles .is-date > b { color: var(--tone-indigo-fg); }
         .si-gm-badge { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 10px; font-weight: 700; line-height: 16px; background: var(--tone-green-fg); color: #fff; vertical-align: 1px; }
-        /* Report popup */
-        .si-report-hero { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface); }
-        .si-report-hero .sr-avatar { width: 44px; height: 44px; font-size: 15px; }
-        .si-report-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
-        .si-report .sr-activity { max-height: none; }
-        .si-report .sr-activity-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-        @media (max-width: 767px) { .si-report-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -371,6 +364,7 @@ if ($can_see_all_depts) {
                                             $can_take_action = ((int)($req['current_approver_id'] ?? 0) === (int)$empid || ($delegatedFromEmpId !== null && (int)($req['current_approver_id'] ?? 0) === (int)$delegatedFromEmpId)) && (($req['current_status'] ?? '') === 'pending_approval');
                                             $can_cancel_self = ((string)($req['submitted_by'] ?? '') === (string)$empid) && (($req['current_status'] ?? '') === 'pending_approval');
                                             $inv_js = htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES);
+                                            $report_url = 'request_report.php?type=salary_increment&inv=' . urlencode((string)$req['request_inv_no']);
                                             $name_js = htmlspecialchars((string)$req['employee_name'], ENT_QUOTES);
                                             $amount_js = number_format((float)$req['increment_amount'], 2);
                                             $meta_js = htmlspecialchars(json_encode([
@@ -408,13 +402,13 @@ if ($can_see_all_depts) {
                                                         <?php if ($can_take_action): ?>
                                                             <a href="javascript:void(0);" class="sr-open-btn" onclick="approveSalaryIncrementRequest('<?= $inv_js ?>', '<?= $name_js ?>', '<?= $amount_js ?>', <?= $meta_js ?>)"><i class="mdi mdi-check"></i> <?= $isHRPayrollRole ? __('submit_salary_increment_request', 'Submit') : __('approve') ?></a>
                                                         <?php else: ?>
-                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="viewSalaryIncrementReport('<?= $inv_js ?>')"><i class="mdi mdi-file-document"></i> <?= __('report') ?></a>
+                                                            <a href="<?= sr_h($report_url) ?>" target="_blank" class="sr-open-btn"><i class="mdi mdi-file-pdf"></i> <?= __('report') ?></a>
                                                         <?php endif; ?>
                                                         <div class="btn-group dropdown">
                                                             <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
                                                             <div class="dropdown-menu dropdown-menu-right">
                                                                 <?php if ($can_take_action): ?>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="viewSalaryIncrementReport('<?= $inv_js ?>')"><i class="mdi mdi-file-document"></i><?= __('report') ?></a>
+                                                                    <a class="dropdown-item" href="<?= sr_h($report_url) ?>" target="_blank"><i class="mdi mdi-file-pdf"></i><?= __('report') ?></a>
                                                                 <?php endif; ?>
                                                                 <a class="dropdown-item" href="salary_increment_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank"><i class="mdi mdi-history"></i><?= __('history') ?></a>
                                                                 <?php if ($can_take_action): ?>
@@ -964,259 +958,6 @@ if ($can_see_all_depts) {
                     }).then(() => location.reload());
                 }
             });
-        }
-
-        const SI_COMPANY_LOGO = <?= json_encode((string)get_setting($conDB, 'logo', 'assets/images/logo.png')) ?>;
-
-        // Report popup (new GUI view) + compact A4 print of the same data.
-        function viewSalaryIncrementReport(requestInvNo) {
-            const esc = SRForm.esc;
-            const num = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            const money = (v) => '<i class="icon-saudi_riyal"></i> ' + num(v);
-            const fmtDate = (v) => {
-                if (!v) return '';
-                const d = new Date(String(v).replace(' ', 'T'));
-                return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-            };
-            const fmtDateTime = (v) => {
-                if (!v) return '';
-                const d = new Date(String(v).replace(' ', 'T'));
-                return isNaN(d.getTime()) ? String(v) : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            };
-            const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
-            const roleLabel = (r) => {
-                const map = { gm: 'GM', hr: 'HR', hr_payroll: 'HR Payroll', administrator: 'Administrator', finance_officer: 'Finance' };
-                r = String(r || '').toLowerCase();
-                return map[r] || r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            };
-            const statusInfo = (s) => {
-                s = String(s || '').toLowerCase();
-                if (s.includes('approved')) return { tone: 'green', icon: 'mdi-check-circle', label: __('approved', 'Approved') };
-                if (s.includes('rejected')) return { tone: 'red', icon: 'mdi-close-circle', label: __('rejected', 'Rejected') };
-                if (s.includes('cancel')) return { tone: 'slate', icon: 'mdi-cancel', label: __('cancelled', 'Cancelled') };
-                if (s.includes('pending')) return { tone: 'amber', icon: 'mdi-clock', label: __('pending', 'Pending') };
-                if (s.includes('awaiting')) return { tone: 'sky', icon: 'mdi-timer-sand', label: __('awaiting', 'Awaiting') };
-                return { tone: 'slate', icon: 'mdi-help-circle', label: s || '-' };
-            };
-            const SALARY_ROWS = [
-                ['basic', __('basic', 'Basic')], ['housing', __('housing', 'Housing')], ['transport', __('transport', 'Transport')],
-                ['food', __('food', 'Food')], ['misc', __('misc', 'Misc')], ['cashier', __('cashier', 'Cashier')],
-                ['fuel', __('fuel', 'Fuel')], ['tel', __('tel', 'Telephone')], ['other', __('others', 'Other')], ['guard', __('guard', 'Guard')]
-            ];
-
-            Swal.fire({ title: __('loading', 'Loading...'), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-
-            $.post('./includes/ajaxFile/ajaxSalaryIncrement.php', { ajaxType: 'getSalaryIncrementReport', request_inv_no: requestInvNo }, null, 'json')
-                .done((res) => {
-                    if (!res || res.status !== 'success' || !res.request) {
-                        Swal.fire({ icon: 'error', title: __('error', 'Error'), text: (res && res.message) || 'Failed to load report.' });
-                        return;
-                    }
-
-                    const req = res.request;
-                    const chain = Array.isArray(res.approval_chain) ? res.approval_chain : [];
-                    const salary = res.salary_info || null;
-                    const st = statusInfo(req.current_status);
-                    const hasApproved = req.approved_amount !== null && req.approved_amount !== undefined;
-                    const gmStep = chain.find(c => String(c.approver_role).toLowerCase() === 'gm' && c.status === 'approved');
-                    const service = req.service_years !== null && req.service_years !== undefined
-                        ? `${req.service_years} ${__('years', 'years')} ${req.service_months || 0} ${__('months', 'months')}` : '-';
-                    const salaryLines = salary ? SALARY_ROWS.filter(([k]) => Number(salary[k]) > 0).map(([k, l]) => ({ label: l, value: Number(salary[k]) })) : [];
-                    const salaryTotal = salary ? Number(salary.total_salary) : null;
-
-                    const empInfo = [
-                        [__('iqama_id_label', 'Iqama / ID'), req.iqama],
-                        [__('nationality', 'Nationality'), req.nationality],
-                        [__('job_title_lable', 'Job Title'), req.job_title],
-                        [__('department', 'Department'), req.department_name],
-                        [__('location', 'Location'), req.location_name],
-                        [__('joining_date', 'Joining Date'), fmtDate(req.joining_date)],
-                        [__('years_of_service', 'Years of Service'), service],
-                        [__('direct_supervisor', 'Direct Supervisor'), req.direct_supervisor_name]
-                    ];
-                    const reqInfo = [
-                        [__('request_no', 'Request No'), req.request_inv_no],
-                        [__('submitted_by', 'Submitted By'), req.submitted_by_name || req.submitted_by],
-                        [__('submitted_date', 'Submitted Date'), fmtDateTime(req.created_at)]
-                    ];
-
-                    /* ---------- popup ---------- */
-                    const kv = (rows) => '<dl class="sr-kv">' + rows.map(([l, v]) =>
-                        `<div class="row-kv"><dt>${esc(l)}</dt><dd>${esc(v || '-')}</dd></div>`).join('') + '</dl>';
-
-                    const salaryTable = salary
-                        ? `<div class="sr-table-wrap"><table class="sr-table" style="margin: 0;">
-                            <tbody>${salaryLines.map(r => `<tr><td>${esc(r.label)}</td><td class="text-right sr-mono">${money(r.value)}</td></tr>`).join('')}
-                            <tr style="border-top: 2px solid var(--sr-border-strong);"><td style="font-weight: 700;">${esc(__('total_salary', 'Total Salary'))}</td>
-                                <td class="text-right sr-mono" style="font-weight: 800; color: var(--sr-accent-strong);">${money(salaryTotal)}</td></tr></tbody>
-                        </table></div>`
-                        : `<div class="sr-notice tone-slate"><i class="mdi mdi-information-outline"></i><div>${esc(__('no_salary_breakdown', 'No active salary breakdown on record.'))}</div></div>`;
-
-                    const chainHtml = chain.length ? '<ul class="sr-activity">' + chain.map(c => {
-                        const s = statusInfo(c.status);
-                        return `<li>
-                            <span class="sr-activity-icon tone-${s.tone}"><i class="mdi ${s.icon}"></i></span>
-                            <div class="sr-activity-body">
-                                <div class="sr-activity-title">${esc(c.approver_name || ('Emp#' + c.approver_id))}
-                                    ${c.approver_role ? `<span class="sr-chip">${esc(roleLabel(c.approver_role))}</span>` : ''}
-                                    ${'<span class="sr-pill tone-' + s.tone + '" style="margin-inline-start: 6px;"><span class="sr-dot"></span>' + esc(s.label) + '</span>'}</div>
-                                ${c.note ? `<div class="sr-activity-note"><i class="mdi mdi-comment-text-outline"></i> ${esc(c.note)}</div>` : ''}
-                                <div class="sr-activity-meta"><span>${esc(__('level', 'Level'))} ${esc(c.level)}</span>${c.approver_job ? `<span>${esc(c.approver_job)}</span>` : ''}${c.action_date ? `<span><i class="mdi mdi-clock"></i> ${esc(fmtDateTime(c.action_date))}</span>` : ''}</div>
-                            </div>
-                        </li>`;
-                    }).join('') + '</ul>' : `<div class="sr-empty">${esc(__('no_data_found', 'No data found'))}</div>`;
-
-                    const html = `<div class="sr-page"><div class="sr-form si-report">
-                        <div class="si-report-hero">
-                            <span class="sr-avatar">${esc(initials(req.employee_name))}</span>
-                            <div class="si-sum-who">
-                                <span class="sr-cell-title">${esc(req.employee_name)}</span>
-                                <span class="sr-cell-sub">${esc(__('emp_id', 'Emp ID'))}: <b>${esc(req.emp_id)}</b>${req.job_title ? ' · ' + esc(req.job_title) : ''}${req.department_name ? ' · ' + esc(req.department_name) : ''}</span>
-                            </div>
-                            <span class="sr-pill tone-${st.tone}"><span class="sr-dot"></span>${esc(st.label)}</span>
-                        </div>
-
-                        <div class="si-sum-tiles si-report-tiles">
-                            <div><span>${esc(__('increment_amount', 'Increment Amount'))}</span><b>${money(req.increment_amount)}</b><small>${esc(__('requested_by_supervisor', 'Requested by supervisor'))}</small></div>
-                            <div class="${hasApproved ? 'is-approved' : ''}"><span>${esc(__('approved_amount', 'Approved Amount'))}</span><b>${hasApproved ? money(req.approved_amount) : '-'}</b>${gmStep ? `<small><span class="si-gm-badge">${esc(__('gm', 'GM'))}</span> ${esc(gmStep.approver_name)}</small>` : ''}</div>
-                            <div class="is-date"><span>${esc(__('increment_effective_date', 'Increment Effective Date'))}</span><b>${esc(fmtDate(req.last_increment_date) || '-')}</b></div>
-                            <div><span>${esc(__('evaluation_score', 'Evaluation Score'))}</span><b>${req.evaluation_score !== null ? num(req.evaluation_score) : '-'}</b></div>
-                        </div>
-
-                        <div class="si-approve-grid">
-                            <div class="si-approve-col">
-                                ${SRForm.section('mdi-account-card-details', __('employee_information', 'Employee Information'), '<div class="sr-fcol c-12">' + kv(empInfo) + '</div>')}
-                            </div>
-                            <div class="si-approve-col">
-                                ${SRForm.section('mdi-cash-multiple', __('current_salary', 'Current Salary'), '<div class="sr-fcol c-12">' + salaryTable + '</div>')}
-                                ${SRForm.section('mdi-file-document', __('request_information', 'Request Information'), '<div class="sr-fcol c-12">' + kv(reqInfo) + '</div>')}
-                            </div>
-                        </div>
-                        ${req.reason ? SRForm.section('mdi-note-text', __('reason', 'Reason'), `<div class="sr-fcol c-12"><div class="sr-notice tone-slate" style="white-space: pre-line;">${esc(req.reason)}</div></div>`) : ''}
-                        ${SRForm.section('mdi-sitemap', __('approval_chain', 'Approval Chain'), '<div class="sr-fcol c-12">' + chainHtml + '</div>', '<i class="mdi mdi-chevron-down et-timeline-chevron"></i>')
-                            // Collapsed by default; same toggle as other report modals
-                            .replace('<div class="sr-fsec-head">', '<div class="sr-fsec-head et-timeline-toggle" onclick="toggleEtApprovalChain(this)" role="button">')
-                            .replace('<div class="sr-fgrid">', '<div class="sr-fgrid d-none">')}
-                    </div></div>`;
-
-                    /* ---------- print (compact A4) ---------- */
-                    const printReport = () => {
-                        const pe = (v) => esc(v == null || v === '' ? '-' : v);
-                        const grid = (rows) => rows.map(([l, v]) => `<div class="f"><span>${pe(l)}</span><b>${pe(v)}</b></div>`).join('');
-                        const logo = new URL(SI_COMPANY_LOGO || 'assets/images/logo.png', window.location.href).href;
-                        const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${pe(req.request_inv_no)}</title>
-<style>
-@page { size: A4; margin: 10mm; }
-* { box-sizing: border-box; }
-body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; color: #1f2937; margin: 0; }
-.hd { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #4f46e5; padding-bottom: 6px; margin-bottom: 8px; }
-.hd img { height: 42px; }
-.hd h1 { margin: 0; font-size: 16px; color: #111827; text-align: center; flex: 1; }
-.hd .meta { text-align: right; font-size: 9.5px; color: #6b7280; line-height: 1.5; }
-.pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-weight: 700; font-size: 9.5px; border: 1px solid; }
-.t-green { color: #15803d; border-color: #86efac; background: #f0fdf4; } .t-red { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
-.t-amber { color: #b45309; border-color: #fcd34d; background: #fffbeb; } .t-slate, .t-sky { color: #475569; border-color: #cbd5e1; background: #f8fafc; }
-h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #4f46e5; margin: 9px 0 4px; padding-bottom: 2px; border-bottom: 1px solid #e5e7eb; }
-.emp { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
-.emp .n { font-size: 14px; font-weight: 700; }
-.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 12px; }
-.f { display: flex; flex-direction: column; padding: 2px 0; border-bottom: 1px dotted #e5e7eb; }
-.f span { font-size: 8.5px; color: #6b7280; text-transform: uppercase; }
-.f b { font-size: 10.5px; }
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; }
-.tiles div { padding: 5px 8px; border-right: 1px solid #d1d5db; } .tiles div:last-child { border-right: 0; }
-.tiles span { display: block; font-size: 8.5px; color: #6b7280; text-transform: uppercase; } .tiles b { font-size: 13px; } .tiles small { display: block; color: #6b7280; font-size: 9px; }
-.tiles .ok { background: #f0fdf4; } .tiles .ok b { color: #15803d; }
-.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 3px 6px; border: 1px solid #e5e7eb; text-align: left; font-size: 10px; }
-th { background: #f3f4f6; font-size: 9px; text-transform: uppercase; color: #4b5563; }
-td.r, th.r { text-align: right; } tr.tot td { font-weight: 700; background: #eef2ff; }
-.reason { border: 1px solid #e5e7eb; border-radius: 4px; padding: 5px 7px; white-space: pre-line; }
-.sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 26px; }
-.sign div { border-top: 1px solid #9ca3af; padding-top: 3px; text-align: center; font-size: 9.5px; color: #4b5563; }
-.ft { margin-top: 10px; font-size: 8.5px; color: #9ca3af; text-align: center; }
-</style></head><body>
-<div class="hd"><img src="${esc(logo)}" alt=""><h1>${pe(__('salary_increment_report', 'Salary Increment Report'))}</h1>
-<div class="meta">${pe(req.request_inv_no)}<br>${pe(__('printed_on', 'Printed on'))}: ${pe(fmtDateTime(new Date().toISOString()))}<br><span class="pill t-${st.tone}">${pe(st.label)}</span></div></div>
-
-<div class="emp"><span class="n">${pe(req.employee_name)}</span><span>${pe(__('emp_id', 'Emp ID'))}: <b>${pe(req.emp_id)}</b></span></div>
-<h2>${pe(__('employee_information', 'Employee Information'))}</h2>
-<div class="grid">${grid(empInfo)}</div>
-
-<h2>${pe(__('increment_details', 'Increment Details'))}</h2>
-<div class="tiles">
-<div><span>${pe(__('increment_amount', 'Increment Amount'))}</span><b>${num(req.increment_amount)}</b><small>${pe(__('requested_by_supervisor', 'Requested by supervisor'))}</small></div>
-<div class="${hasApproved ? 'ok' : ''}"><span>${pe(__('approved_amount', 'Approved Amount'))}</span><b>${hasApproved ? num(req.approved_amount) : '-'}</b>${gmStep ? `<small>GM: ${pe(gmStep.approver_name)}</small>` : ''}</div>
-<div><span>${pe(__('increment_effective_date', 'Increment Effective Date'))}</span><b>${pe(fmtDate(req.last_increment_date))}</b></div>
-<div><span>${pe(__('evaluation_score', 'Evaluation Score'))}</span><b>${req.evaluation_score !== null ? num(req.evaluation_score) : '-'}</b></div>
-</div>
-
-<div class="cols">
-<div><h2>${pe(__('current_salary', 'Current Salary'))}</h2>
-${salary ? `<table><thead><tr><th>${pe(__('salary_component', 'Salary Component'))}</th><th class="r">${pe(__('amount', 'Amount'))} (SAR)</th></tr></thead><tbody>
-${salaryLines.map(r => `<tr><td>${pe(r.label)}</td><td class="r">${num(r.value)}</td></tr>`).join('')}
-<tr class="tot"><td>${pe(__('total_salary', 'Total Salary'))}</td><td class="r">${num(salaryTotal)}</td></tr></tbody></table>` : `<div class="reason">${pe(__('no_salary_breakdown', 'No active salary breakdown on record.'))}</div>`}
-</div>
-<div><h2>${pe(__('request_information', 'Request Information'))}</h2>
-<table><tbody>${reqInfo.map(([l, v]) => `<tr><th style="width: 40%;">${pe(l)}</th><td>${pe(v)}</td></tr>`).join('')}</tbody></table>
-${req.reason ? `<h2>${pe(__('reason', 'Reason'))}</h2><div class="reason">${pe(req.reason)}</div>` : ''}
-</div>
-</div>
-
-<h2>${pe(__('approval_chain', 'Approval Chain'))}</h2>
-<table><thead><tr><th>${pe(__('level', 'Level'))}</th><th>${pe(__('approver', 'Approver'))}</th><th>${pe(__('role', 'Role'))}</th><th>${pe(__('status', 'Status'))}</th><th>${pe(__('date', 'Date'))}</th><th>${pe(__('comment', 'Comment'))}</th></tr></thead><tbody>
-${chain.map(c => `<tr><td>${pe(c.level)}</td><td>${pe(c.approver_name || ('Emp#' + c.approver_id))}</td><td>${pe(roleLabel(c.approver_role))}</td><td>${pe(statusInfo(c.status).label)}</td><td>${pe(fmtDateTime(c.action_date))}</td><td>${pe(c.note)}</td></tr>`).join('')}
-</tbody></table>
-
-<div class="sign"><div>${pe(__('direct_supervisor', 'Direct Supervisor'))}</div><div>${pe(__('hr_department', 'HR Department'))}</div><div>${pe(__('general_manager', 'General Manager'))}</div></div>
-<div class="ft">${pe(__('system_generated_document', 'This is a system generated document.'))}</div>
-<script>
-/* The print tab prints itself once loaded (logo included) and closes when the dialog is done. */
-(function () {
-    var closed = false;
-    function done() { if (closed) return; closed = true; setTimeout(function () { window.close(); }, 100); }
-    window.addEventListener('afterprint', done);
-    window.addEventListener('load', function () {
-        setTimeout(function () {
-            window.focus();
-            var t = Date.now();
-            window.print();
-            // Chrome/Edge block in print() until the dialog closes - close right away there.
-            // Where print() returns at once, wait for afterprint instead.
-            if (Date.now() - t > 300) done();
-        }, 200);
-    });
-})();
-<\/script>
-</body></html>`;
-                        const w = window.open('', '_blank');
-                        if (!w) {
-                            Swal.showValidationMessage(__('allow_popups_to_print', 'Please allow pop-ups to print.'));
-                            return;
-                        }
-                        w.document.open();
-                        w.document.write(doc);
-                        w.document.close();
-                    };
-
-                    Swal.fire({
-                        title: __('salary_increment_report', 'Salary Increment Report'),
-                        html: html,
-                        width: '1100px',
-                        showConfirmButton: true,
-                        showCancelButton: true,
-                        confirmButtonColor: APP_COLORS.primary,
-                        cancelButtonColor: APP_COLORS.danger_dark,
-                        confirmButtonText: '<i class="mdi mdi-printer"></i> ' + esc(__('print', 'Print')),
-                        cancelButtonText: '<i class="mdi mdi-close"></i> ' + esc(__('close', 'Close')),
-                        allowOutsideClick: false,
-                        customClass: { popup: 'sr-addline-popup sr-page' },
-                        // Print keeps the popup open.
-                        preConfirm: () => { printReport(); return false; }
-                    });
-                })
-                .fail(() => Swal.fire({ icon: 'error', title: __('error', 'Error'), text: 'Failed to load report.' }));
         }
     </script>
 </body>

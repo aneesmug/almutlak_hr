@@ -96,7 +96,7 @@ if (!$rows) {
         if (!in_array($status, ['completed', 'cancelled', 'rejected'], true)) {
             $menu[] = '<div class="dropdown-divider"></div><button type="button" class="dropdown-item text-danger" onclick="cancelVacationRequest(' . (int)$vac['id'] . ', ' . sr_h(json_encode((string)$vac['vac_type'])) . ', ' . sr_h(json_encode(format_safe_date($vac['start_date'] ?? null, 'M d, Y'))) . ')"><i class="mdi mdi-close"></i> ' . sr_h(__('cancel_request', 'Cancel Request')) . '</button>';
         }
-        $primary = '<a class="sr-open-btn" href="vacation_report_details.php?id=' . (int)$vac['id'] . '&emp_id=' . urlencode((string)$vac['emp_id']) . '"><i class="mdi mdi-eye"></i> ' . sr_h(__('view', 'View')) . '</a>';
+        $primary = '<a class="sr-open-btn" href="request_report.php?type=vacation&id=' . (int)$vac['id'] . '&emp_id=' . urlencode((string)$vac['emp_id']) . '"><i class="mdi mdi-eye"></i> ' . sr_h(__('view', 'View')) . '</a>';
 
         $body .= '<tr>'
             . '<td><span class="sr-cell-title">' . sr_h($vac['vac_type']) . '</span>' . (!empty($vac['fly_type']) ? '<span class="sr-cell-sub">' . sr_h(ucfirst((string)$vac['fly_type'])) . '</span>' : '') . '</td>'

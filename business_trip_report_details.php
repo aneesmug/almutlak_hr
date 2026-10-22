@@ -13,6 +13,7 @@
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/approval_steps.php'; // approval chain stepper (shared with the other request reports)
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
@@ -98,7 +99,8 @@ if (mysqli_num_rows($query) == 1) {
                        e.name AS approver_name,
                        e.emp_id AS approver_emp_id,
                        al.user_type AS approver_role,
-                       d2.dep_nme AS approver_dept_name
+                       d2.dep_nme AS approver_dept_name,
+                       e.avatar AS approver_avatar, e.sex AS approver_sex
                    FROM request_approvers ra
                    LEFT JOIN employees e ON ra.approver_id = e.emp_id
                    LEFT JOIN admin_login al ON e.emp_id = al.emp_id
@@ -596,46 +598,7 @@ if (mysqli_num_rows($query) == 1) {
 
                             <!-- Approval Chain Timeline - Hidden by default -->
                             <div id="approvalStatusContainer" style="display: none;">
-                                <div class="report-section">
-                                    <h5 class="section-title">
-                                        <i class="fa fa-tasks"></i> <?= __('approval_status') ?>
-                                    </h5>
-                                    <?php if (!empty($approval_chain)): ?>
-                                        <div class="approval-flat-list">
-                                            <?php foreach ($approval_chain as $step): ?>
-                                                <?php
-                                                $step_status = $step['status'] ?? 'pending';
-                                                $status_color = 'text-muted';
-                                                if ($step_status === 'approved') $status_color = 'text-success';
-                                                elseif ($step_status === 'rejected') $status_color = 'text-danger';
-                                                elseif ($step_status === 'pending') $status_color = 'text-warning';
-
-                                                $role_icon = 'fa-user';
-                                                if (!empty($step['approver_role']) && stripos($step['approver_role'], 'hr') !== false) {
-                                                    $role_icon = 'fa-user-shield';
-                                                } elseif (!empty($step['approver_role']) && (stripos($step['approver_role'], 'manager') !== false || stripos($step['approver_role'], 'administrator') !== false || stripos($step['approver_role'], 'gm') !== false)) {
-                                                    $role_icon = 'fa-user-tie';
-                                                }
-
-                                                $approver_display_name = getDisplayName((string)($step['approver_name'] ?? ('Emp#' . (int)($step['approver_id'] ?? 0))));
-                                                $level_scope = !empty($step['approver_dept_name']) ? getDisplayName($step['approver_dept_name']) : ucwords(str_replace('_', ' ', (string)($step['approver_role'] ?? '')));
-                                                ?>
-                                                <div class="approval-flat-item">
-                                                    <i class="fa <?= $role_icon ?> <?= $status_color ?>"></i>
-                                                    <strong><?= htmlspecialchars($approver_display_name) ?></strong>
-                                                    <small class="text-muted">(<?= __('level') ?> <?= (int)($step['approval_level'] ?? 0) ?><?= $level_scope !== '' ? ': ' . htmlspecialchars((string)$level_scope) : '' ?>)</small>
-                                                    <?php if ($step_status === 'rejected' && !empty($step['note'])): ?>
-                                                        <div class="approval-flat-note"><?= getDisplayName(htmlspecialchars((string)$step['note'])) ?></div>
-                                                    <?php endif; ?>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="info-box">
-                                            No approval chain found for this request.
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
+                                <?= approval_steps_html(approval_steps_rows($approval_chain, (string)$current_status), (string)$current_status) ?>
                             </div>
 
                             <!-- Signature Lines -->

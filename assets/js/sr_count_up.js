@@ -34,7 +34,9 @@
         // Employee master: header quick stats (includes/emp_top_info.php) + salary card (view_employee.php)
         '.eh-stat b', '.sal-total > b', '.sal-item-text b', '.sal-item-pct',
         '.stats-card-count-circle', '.stats-card-pct', '.dd-tile-count', '.dd-tile-pct b', '.dx-count', '.dx-doc-num', '.dash-scope-count', '.dex-stat-sub b', '.vac-sum-tile b', '.vac-sum-bar-head > span:last-child',
-        '.et-stat b', '.et-next-head > span', '.et-next-head > b', '.et-eos b'
+        '.et-stat b', '.et-next-head > span', '.et-next-head > b', '.et-eos b',
+        // History pages (includes/sr_history_helpers.php srh_tiles)
+        '.srh-tile-value'
     ].join(',');
     var SKIP = '.no-count-up, [data-no-count-up]';
     // Stat cards slide up + fade in one after another when they come into view.
@@ -43,7 +45,9 @@
         '.dash-kpi', '.sr-stat', '.sr-tile', '.sr-scard', '.stats-card', '.dd-tile', '.doc-expiry-card', '.dash-scope-item',
         '.dex-stat', '.eh-stat', '.sal-total', '.sal-item', '.et-stat', '.et-eos',
         // view_employee.php: vacation summary, loan stats/boxes, document list
-        '.vac-sum-tile', '.vac-sum-bar', '.ve-loan-stat', '.ve-loan-box', '.doc-item'
+        '.vac-sum-tile', '.vac-sum-bar', '.ve-loan-stat', '.ve-loan-box', '.doc-item',
+        // History pages: KPI tiles, banner, cards
+        '.srh-tile', '.srh-hero', '.srh-card'
     ].join(',');
     var RISE_STAGGER = 80;   // ms between cards
     var RISE_MAX_DELAY = 800;

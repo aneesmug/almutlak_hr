@@ -94,6 +94,8 @@ $stmt->close();
 $chain = [];
 $stmt = $conDB->prepare("SELECT ra.approval_level, ra.status, ra.action_date, ra.note,
                                 COALESCE(e.name, al.fullname, al.username) AS approver_name,
+                                e.avatar AS approver_avatar, e.sex AS approver_sex,
+                                (SELECT dep_nme FROM department WHERE id = e.dept) AS approver_dept_name,
                                 al.user_type
                          FROM request_approvers ra
                          LEFT JOIN employees e ON ra.approver_id = e.emp_id
@@ -147,17 +149,11 @@ if (!empty($payments)) {
     $payments_html .= '</tbody></table></div>';
 }
 
-$chain_rows = [];
-foreach ($chain as $link) {
-    // If request is rejected, skip pending/awaiting approvers
-    if ($is_rejected && in_array($link['status'], ['pending', 'awaiting'], true)) continue;
-    $chain_rows[] = ['level' => $link['approval_level'], 'name' => getDisplayName(parseName($link['approver_name']) ?? 'N/A'), 'role' => $link['user_type'] ?? '', 'status' => $link['status'], 'date' => $link['action_date'], 'note' => !empty($link['note']) ? getDisplayName($link['note']) : ''];
-}
 $history_rows = array_map(function ($e) {
     return ['status' => $e['status'] ?? '', 'by' => getDisplayName($e['emp_name'] ?? ''), 'date' => $e['created_at'] ?? null, 'note' => getDisplayName($e['note'] ?? '')];
 }, $history);
 
-$report_btn = '<a href="loan_report_details.php?id=' . (int)$loan['id'] . '&emp_id=' . urlencode($loan['emp_id']) . '" target="_blank" class="sr-btn"><i class="mdi mdi-file-pdf"></i> ' . sr_h(__('view_report')) . '</a>';
+$report_btn = '<a href="request_report.php?type=loan&id=' . (int)$loan['id'] . '&emp_id=' . urlencode($loan['emp_id']) . '" target="_blank" class="sr-btn"><i class="mdi mdi-file-pdf"></i> ' . sr_h(__('view_report')) . '</a>';
 
 srh_page_open(__('loan_approval_history'));
 echo srh_header(__('loan_approval_history'), __('complete_approval_timeline'), 'all_applied_loan.php', $report_btn);
@@ -169,10 +165,10 @@ echo srh_hero(getDisplayName($loan['employee_name']), $avatar_path, [
 ], srh_status_pill($loan['status']));
 
 echo srh_tiles([
-    [__('loan_amount'), srh_money($loan['loan_amount']), 'indigo', sr_h(getDisplayName(ucwords(str_replace('_', ' ', $loan['loan_type']))))],
-    [__('monthly_deduction'), srh_money($loan['monthly_deduction']), '', (int)$loan['installments'] . ' ' . sr_h(__('months'))],
-    [__('total_paid'), srh_money($total_paid), 'green', number_format($payment_percentage, 1) . '%'],
-    [__('remaining'), srh_money($remaining_amount), $remaining_amount > 0 ? 'amber' : 'green', ''],
+    [__('loan_amount'), srh_money($loan['loan_amount']), 'indigo', sr_h(getDisplayName(ucwords(str_replace('_', ' ', $loan['loan_type'])))), 'mdi-cash-multiple'],
+    [__('monthly_deduction'), srh_money($loan['monthly_deduction']), '', (int)$loan['installments'] . ' ' . sr_h(__('months')), 'mdi-calendar-text'],
+    [__('total_paid'), srh_money($total_paid), 'green', number_format($payment_percentage, 1) . '%', 'mdi-wallet'],
+    [__('remaining'), srh_money($remaining_amount), $remaining_amount > 0 ? 'amber' : 'green', '', 'mdi-cash'],
 ]);
 ?>
 <div class="srh-grid">
@@ -202,7 +198,7 @@ echo srh_tiles([
                 . '<div style="margin-top: 14px;">' . $payments_html . '</div>',
                 count($payments) . ' ' . sr_h(__('payments', 'payments'))) ?>
         <?php endif; ?>
-        <?= srh_card('mdi-sitemap', __('approval_chain'), srh_chain($chain_rows), count($chain_rows) . ' ' . sr_h(__('levels', 'levels'))) ?>
+        <?= srh_approval_chain($chain, $loan['status']) ?>
     </div>
 </div>
 <?= srh_card('mdi-history', __('status_history_timeline'), srh_timeline($history_rows)) ?>

@@ -622,7 +622,9 @@ $current_page = strtolower(basename($_SERVER['PHP_SELF']));
 // the report/status pages check that an employee only opens their own trip.
 const EMPLOYEE_ALLOWED_PAGES = ['profile.php', 'all_applied_loan.php','vacation_report_details.php', 'employee_vacation_history.php','employee_loan_history.php',
     'employee_business_trip_history.php', 'business_trip_report_details.php', 'business_trip_status_history.php',
-    'employee_attendance_history.php'];
+    'employee_attendance_history.php',
+    // one report page for all request types - it re-checks access per type (vacation / business trip for employees)
+    'request_report.php'];
 const ASSISTANT_RESTRICTED_PAGES = ['dashbydepart.php', 'filter_employee.php', 'reg_employee.php', 'search.php', 'manual_vacation.php'];
 
 // Skip access control for AJAX file requests - they return JSON and handle their own auth

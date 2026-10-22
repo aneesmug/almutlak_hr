@@ -1,0 +1,1302 @@
+<?php
+/****************************************************************
+ * Vacation request report - body part of request_report.php?type=vacation&id=..&emp_id=..
+ * Header, employee banner, approval chain, signatures and footer come from includes/report_layout.php.
+ *
+ * MODIFICATION SUMMARY (from vacation_report_details.php):
+ * 1. REVISED APPROVAL TIMELINE: Overhauled the approval timeline logic to accurately reflect the new multi-step workflow (DPT_Manager -> HR_Assistant -> HR_Manager -> IT -> GM).
+ * 2. DYNAMIC WORKFLOW PATH: The timeline now dynamically adjusts its path, correctly skipping steps for HR employees and omitting the IT step if the employee has no assigned assets.
+ * 3. IMPROVED STATUS VISUALS: Corrected the timeline rendering to properly show completed steps as 'approved', the current step as 'pending', and future steps with a neutral style.
+ * 4. ENHANCED LABELS & ICONS: Updated the map of approval steps with clearer labels and more distinct icons for each stage of the process.
+ * 5. EMERGENCY LEAVE: Financial details are not calculated and the "Payment Details" section is hidden if the fly_type is 'emergency'.
+ * 6. END OF SERVICE SALARY: Payment Details section is hidden when vacation_salary_type is 'end_of_service', showing info message instead.
+ ****************************************************************/
+
+// Loaded by request_report.php (?type=vacation) - session_check.php + report_layout.php are already in.
+require_once dirname(__DIR__) . '/special_access_helper.php';
+
+// Restrict access: Employees cannot view this detailed report page
+// if (isset($isEmployee) && $isEmployee === true) {
+//     header("Location: ./profile.php");
+//     exit();
+// }
+
+$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
+if (mysqli_num_rows($query) == 1) {
+    include("./includes/avatar_select.php");
+
+    // 1. Get and validate the IDs from the URL
+    $vacation_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    $emp_id = isset($_GET['emp_id']) ? $_GET['emp_id'] : '';
+
+    if ($vacation_id === 0 || empty($emp_id)) {
+        die("Invalid request parameters.");
+    }
+
+    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type, overtime_hours, deduction_hours, deduction_days, payroll_note, accommodation_provided, transportation_provided, contract_period, bank details from bank_list)
+    $sql = "SELECT 
+                v.*, 
+                v.fly_type as raw_fly_type,
+                v.attachment_path,
+                v.vacation_salary_type,
+                v.departure_date,
+                v.arrival_date,
+                v.overtime_hours,
+                v.deduction_hours,
+                v.deduction_days,
+                v.other_earnings,
+                v.other_deductions,
+                v.payroll_note,
+                v.accommodation_provided,
+                v.transportation_provided,
+                e.name as employee_name,
+                e.avatar,
+                e.joining_date,
+                e.gosi,
+                e.country as country_id,
+                e.allow_vacation_salary_below_min_days,
+                e.passport_number,
+                e.passport_exp,
+                e.bank_name,
+                e.iban,
+                bl.name as bank_name_en,
+                bl.bank_name_ar,
+                d.dep_nme AS `deptname`,
+                d.dep_nme_ar AS `deptname_ar`,
+                comp.comp_name,
+                comp.comp_name_ar,
+                c.name AS `country_name`,
+                re.name AS `replacement_person_name`,
+                cp.vac_period AS contract_vacation_days,
+                cp.period AS contract_period,
+                canceller_emp.name AS `cancelled_by_name`,
+                CASE
+                    WHEN `v`.`fly_type` = 'annual' THEN 'Annual Vacation'
+                    WHEN `v`.`fly_type` = 'emergency' THEN 'Emergency Vacation'
+                    ELSE ''
+                END AS `fly_type`
+            FROM emp_vacation v
+            JOIN employees e ON v.emp_id = e.emp_id
+            LEFT JOIN bank_list bl ON e.bank_name = bl.bnk_id
+            LEFT JOIN employees re ON v.replacement_person = re.emp_id
+            LEFT JOIN employees canceller_emp ON v.cancelled_by = canceller_emp.emp_id
+            LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN companies comp ON e.comp_no = comp.comp_id
+            LEFT JOIN countries c ON e.country = c.id
+            LEFT JOIN contract_period cp ON e.vac_period = cp.id
+            WHERE v.id = ? AND v.emp_id = ?";
+
+    $stmt = $conDB->prepare($sql);
+    $stmt->bind_param("is", $vacation_id, $emp_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $request = $result->fetch_assoc();
+    $stmt->close();
+
+    if (!$request) {
+        die("Vacation request not found.");
+    }
+
+    // Determine whether to show the employee's remaining vacation balance:
+    // the employee viewing their own record, admin/HR, or someone explicitly granted this special access.
+    $can_view_remaining_balance = (
+        (string)$emp_id === (string)($empid ?? '')
+        || !empty($is_system_admin)
+        || ($user_type ?? '') === 'hr'
+        || user_has_special_access($conDB, $empid ?? '', 'view_remaining_balance_in_report', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+    );
+    $remaining_vacation_balance = null;
+    if ($can_view_remaining_balance) {
+        $remaining_vacation_balance = get_live_vacation_balance($conDB, $emp_id);
+        if ($remaining_vacation_balance === null) {
+            $remaining_vacation_balance = get_employee_vacation_balance_from_db($conDB, $emp_id);
+        }
+    }
+
+    // 3. Fetch Salary Details
+    $salary_sql = "SELECT * FROM `emp_salary` WHERE `emp_id`= ? ORDER BY id DESC LIMIT 1";
+    $stmt_salary = $conDB->prepare($salary_sql);
+    $stmt_salary->bind_param("s", $emp_id);
+    $stmt_salary->execute();
+    $salary_result = $stmt_salary->get_result();
+    $salary = $salary_result->fetch_assoc();
+    $stmt_salary->close();
+
+    // Fetch employee's assigned assets
+    $assets_sql = "SELECT a.name as asset_name, ea.serial_number 
+                   FROM employee_assets ea 
+                   JOIN assets a ON ea.asset_id = a.id 
+                   WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
+    $stmt_assets = $conDB->prepare($assets_sql);
+    $stmt_assets->bind_param("s", $emp_id);
+    $stmt_assets->execute();
+    $assets_result = $stmt_assets->get_result();
+    $assigned_assets = [];
+    while ($row = $assets_result->fetch_assoc()) {
+        $assigned_assets[] = $row;
+    }
+    $stmt_assets->close();
+
+    // 4. Calculate Vacation Salary & Fees
+    $vacation_salary = 0;
+    $working_days_salary = 0;
+    $gosi_deduction = 0;
+    $ticket_fee = 0;
+    $permit_fee = 0;
+    $overtime_amount = 0;
+    $deduction_amount = 0;
+    $working_daily_rate = 0;
+    $working_days = 0;
+    $working_days_divisor_display = 30;
+    $working_days_daily_rate_display = 0;
+    $is_full_working_month = false;
+    $salaries_earned = 1;
+    
+    // Get approved vacation days from the request (vacdays = approved days)
+    $approved_days = (float)($request['vacdays'] ?? 0);
+    $applied_days = $approved_days; // Use approved days for calculations
+
+    // Fallback for legacy/incomplete rows where vacdays is zero but date range exists.
+    // This ensures full-month vacations (1st to last day) are still paid correctly.
+    if (
+        $approved_days <= 0 &&
+        !empty($request['start_date']) &&
+        !empty($request['return_date']) &&
+        (($request['vac_type'] ?? '') !== 'Encashed')
+    ) {
+        try {
+            $start_date_obj = new DateTime($request['start_date']);
+            $return_date_obj = new DateTime($request['return_date']);
+            if ($return_date_obj >= $start_date_obj) {
+                $date_interval = $start_date_obj->diff($return_date_obj);
+                $derived_days = (float)$date_interval->days + 1; // inclusive range
+                $approved_days = $derived_days;
+                $applied_days = $derived_days;
+            }
+        } catch (Exception $e) {
+            // Keep original values if date parsing fails.
+        }
+    }
+    
+    // Get payroll overtime/deduction values
+    $overtime_hours = (float)($request['overtime_hours'] ?? 0);
+    $deduction_hours = (float)($request['deduction_hours'] ?? 0);
+    $deduction_days = (float)($request['deduction_days'] ?? 0);
+    $other_earnings = (float)($request['other_earnings'] ?? 0);
+    $other_deductions = (float)($request['other_deductions'] ?? 0);
+    $payroll_note = $request['payroll_note'] ?? '';
+    
+    // Determine vacation salary type
+    $vacation_salary_type = $request['vacation_salary_type'] ?? 'payroll';
+    $local_annual_rule = getLocalAnnualPayrollRemovalRuleConfig();
+    $local_annual_min_days_exclusive = (float)($local_annual_rule['minimum_days_exclusive'] ?? 20);
+    $vacation_salary_payment_yes = ($vacation_salary_type === 'payroll');
+    $vacation_salary_payment_no = ($vacation_salary_type === 'end_of_service');
+    $vac_type = $request['vac_type'] ?? '';
+    $fly_type = $request['raw_fly_type'] ?? '';
+    
+    // === PAYROLL LOGIC RULES ===
+    // 1. Fly + Annual: Employee EXCLUDED from payroll → Show vacation salary (if vacation_salary_type = payroll)
+    // 2. Local Vacation + Annual (Saudi):
+    //    - vacation_salary_type = payroll: Removed from payroll → payable amounts are shown
+    //    - vacation_salary_type = end_of_service: Employee ACTIVE in payroll → no vacation payout now
+    // 3. Encashment: Show ONLY encashment amount (no working days salary)
+    // 4. Emergency: Not payable
+    // 5. Other leave types: Not payable
+    
+    $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
+    $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
+    $is_encashment = ($vac_type === 'Encashed');
+    $is_emergency = ($fly_type === 'emergency');
+    $allow_vacation_salary_below_min_days = ((string)($request['allow_vacation_salary_below_min_days'] ?? '0') === '1');
+    // Once a settlement exists, use the value frozen at settlement creation.
+    $allow_vacation_salary_below_min_days = resolveSettlementVacSalaryOverride($conDB, $request['request_inv_no'] ?? '', $allow_vacation_salary_below_min_days);
+    $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vacation_salary_below_min_days);
+    $vacation_salary_payment_yes = ($vacation_salary_type === 'payroll');
+    $vacation_salary_payment_no = ($vacation_salary_type === 'end_of_service');
+    $is_local_annual_saudi_long_leave = matchesLocalAnnualPayrollRemovalRule(
+        $vac_type,
+        $fly_type,
+        $request['country_id'] ?? 0,
+        $approved_days,
+        $vacation_salary_type,
+        $allow_vacation_salary_below_min_days
+    );
+    $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
+        $vac_type,
+        $fly_type,
+        $request['country_id'] ?? 0,
+        $approved_days,
+        $request['is_deductible'] ?? 0,
+        $vacation_salary_type,
+        $allow_vacation_salary_below_min_days
+    );
+    
+    // Non-payable leave types
+    $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
+    $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
+    
+    // Determine if this vacation gets any payment calculation.
+    // Local Annual can be payable only when it is removed from payroll by rule.
+    // Emergency vacations are never balance-deductible, but still get paid for
+    // days actually worked before departure (working_days_salary only - no
+    // vacation_salary/GOSI for the vacation period itself).
+    $calculate_payments = !$is_non_payable_leave && ($is_emergency || (!$is_local_annual || $is_local_annual_removed_from_payroll));
+    
+    // Base payroll divisor stays fixed at 30 days for all calculations except Working Days Salary
+    $days_in_month = 30;
+    // Working Days Salary divisor uses actual month days of vacation start date
+    $working_days_month_days = 30;
+    if (!empty($request['start_date'])) {
+        $start_ts = strtotime($request['start_date']);
+        if ($start_ts !== false) {
+            $working_days_month_days = (int)date('t', $start_ts); // 28/29/30/31
+        }
+    }
+    
+    if ($calculate_payments && $salary) {
+        $basic_salary = (float)($salary['basic'] ?? 0);
+        $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
+        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+        $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
+        
+        // --- CALCULATE OVERTIME AND DEDUCTIONS (EOS Logic) ---
+        $DEDUCTION_BASE = $total_monthly_salary;
+        $dailyRateDeduction = round($DEDUCTION_BASE / $days_in_month, 2);
+        $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
+        
+        // OVERTIME CALCULATION (per EOS file):
+        // per-hour overtime rate = (basic/240)/2 + (full/240)
+        $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
+        
+        // Calculate amounts
+        if ($overtime_hours > 0) {
+            $overtime_amount = round($overtimeHourlyRate * $overtime_hours);
+        }
+        
+        if ($deduction_hours > 0 || $deduction_days > 0 || $other_deductions > 0) {
+            $deduction_hours_amount = round($hourlyRateDeduction * $deduction_hours);
+            $deduction_days_amount = round($dailyRateDeduction * $deduction_days);
+            $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_deductions);
+        } else if ($other_deductions > 0) {
+            $deduction_amount = round($other_deductions);
+        }
+
+        // === WORKING DAYS SALARY ===
+        // For vacations removed from payroll, pay salary for worked days before departure.
+        if (($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) && !empty($request['start_date'])) {
+            $start_date_obj = new DateTime($request['start_date']);
+            $start_day = (int)$start_date_obj->format('d');
+
+            // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
+            // If vacation starts on day 1, there are zero working days in the same month.
+            if ($start_day === 1) {
+                $working_days = 0;
+                $working_days_divisor_display = 30;
+                $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
+                $working_days_salary = 0;
+                $is_full_working_month = false;
+            } else {
+                // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
+                $working_days = $start_day - 1;
+
+                // If worked days complete the current month (28/29/30/31), pay full monthly salary.
+                // Otherwise, calculate using the fixed 30-day payroll divisor.
+                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                    $working_days_salary = round($total_monthly_salary);
+                    $working_days_divisor_display = $working_days_month_days;
+                    $working_days_daily_rate_display = $working_daily_rate;
+                    $is_full_working_month = true;
+                } else {
+                    $working_days_divisor_display = 30;
+                    $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
+                    $working_days_salary = round($working_days_daily_rate_display * $working_days);
+                }
+            }
+        }
+
+        // === VACATION SALARY ===
+        // Only for payable payroll vacations:
+        // - Fly + Annual AND vacation_salary_type = 'payroll'
+        // - Local Vacation + Annual removed from payroll AND vacation_salary_type = 'payroll'
+        // NOT for Encashment (handled separately)
+        // IMPORTANT: Calculation is based on APPROVED DAYS (vacdays field)
+        // Formula: (daily rate × vacation days) = (total_monthly_salary / 30) × approved_days
+        if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
+            // Calculate vacation salary as daily rate × vacation days
+            // Vacation days are paid on the components chosen in App Settings > Vacation Payroll
+            $vacation_salary = round(round(vacation_salary_monthly_base($salary, $total_monthly_salary) / $days_in_month, 2) * $approved_days);
+            
+            // Track salaries_earned for display purposes (how many full contract periods)
+            $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
+            $salaries_earned = 1; // Default to 1 for display
+            
+            if ($contract_days > 0) {
+                // Extract period years from contract_period string (e.g., "2 Years - 60" → 2)
+                $contract_period_str = $request['contract_period'] ?? '';
+                $period_years = 1; // default to 1 year
+                
+                if (!empty($contract_period_str) && preg_match('/(\d+)\s+Years?/', $contract_period_str, $matches)) {
+                    $period_years = (int)$matches[1];
+                }
+                
+                // Calculate how many full salaries represented (for display only)
+                // Formula: (approved_days / contract_days) * period_years
+                $salaries_earned = floor($approved_days / $contract_days) * $period_years;
+                if ($salaries_earned < 1) $salaries_earned = 1; // Always show at least 1
+            }
+        }
+
+        // === GOSI DEDUCTION ===
+        // Check auto_gosi_deduction flag: if 1 (enabled), apply GOSI; if 0 (disabled), skip
+        $auto_gosi_deduction = (int)($request['auto_gosi_deduction'] ?? 1);  // Default to 1 for backward compatibility
+        
+        if ($auto_gosi_deduction && isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
+            $gosi_percentage = (float)$request['gosi'];
+            if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
+                // Match payroll config: GOSI is based on basic + housing salary components.
+                $gosi_base = (float)$basic_salary + (float)($salary['housing'] ?? 0);
+                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
+            } elseif ($is_encashment) {
+                // For Encashment: GOSI calculated separately in encashment section
+                $gosi_deduction = 0;
+            }
+        }
+        
+        // === TICKET AND PERMIT FEES ===
+        // Only for Fly + Annual (non-Saudi employees)
+        if ($is_fly_annual && $request['country_id'] != 191) {
+            $ticket_fee = round($request['ticket_pay'] ?? 0);
+            $permit_fee = round($request['permit_fee'] ?? 0);
+        }
+    }
+
+    // === TOTAL PAYABLE CALCULATION ===
+    if ($is_encashment) {
+        // Encashment: Total is handled in encashment section
+        $total_payable = 0;
+    } elseif ($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) {
+        // Payable vacations (Fly + Annual OR Local Annual removed from payroll OR Emergency):
+        // Working days component applies to Fly/Emergency only.
+        // $deduction_amount already includes $other_deductions from the calculation above
+        $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) ? $working_days_salary : 0;
+        $total_payable = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
+    } else {
+        // Local Vacation + Annual or other: No payment (stays in payroll)
+        $total_payable = 0;
+    }
+
+    // === HOLIDAY / BALANCE-DEDUCTION BREAKDOWN ===
+    // Shows which days inside the requested period are official company holidays
+    // (excluded from the balance deduction), which are weekend days (Fri/Sat by
+    // default — still counted against the balance), and the resulting deductible
+    // day count. Mirrors the exact rule used by update_vacation_balance_on_approval()
+    // in includes/helper_functions.php, so this report always matches what was
+    // actually charged to the employee's balance.
+    $holiday_breakdown = null;
+    $is_annual_vacation = ($fly_type === 'annual');
+
+    // Whether the Vacation Salary Payment (Yes/No) choice actually applied to this
+    // request. Mirrors leaveHandler.php's exact gate (lines ~1129-1157): below the
+    // minimum_days_exclusive threshold and no per-employee override, the employee was
+    // never asked - the choice is meaningless, so don't show it in the report either.
+    // Applies uniformly to Fly and Local Vacation - the per-employee override
+    // (allow_vacation_salary_below_min_days) is what unlocks it below the threshold.
+    $meets_min_days_for_salary_choice = $is_annual_vacation
+        && (($approved_days >= $local_annual_min_days_exclusive) || $allow_vacation_salary_below_min_days);
+
+    if (!empty($request['start_date']) && !empty($request['return_date']) && $vac_type !== 'Encashed') {
+        $emp_company_id = 0;
+        $emp_dept_id = 0;
+        $company_sql = "SELECT COALESCE(c.id, e.comp_no) AS company_id, e.dept AS dept_id
+                         FROM employees e
+                         LEFT JOIN companies c ON c.comp_id = e.comp_no
+                         WHERE e.emp_id = ?";
+        if ($stmt_hc = $conDB->prepare($company_sql)) {
+            $stmt_hc->bind_param("s", $emp_id);
+            $stmt_hc->execute();
+            $hc_row = $stmt_hc->get_result()->fetch_assoc();
+            $stmt_hc->close();
+            $emp_company_id = (int)($hc_row['company_id'] ?? 0);
+            $emp_dept_id = (int)($hc_row['dept_id'] ?? 0);
+        }
+
+        $active_holidays = get_active_holidays_in_range($conDB, $request['start_date'], $request['return_date'], $emp_company_id > 0 ? $emp_company_id : null);
+
+        $vac_s = new DateTime($request['start_date']);
+        $vac_e = new DateTime($request['return_date']);
+
+        $holiday_date_set = [];
+        $holiday_list = [];
+        foreach ($active_holidays as $h) {
+            try {
+                $h_start = new DateTime($h['start_date']);
+                $h_end = new DateTime($h['end_date']);
+                $overlap_start = max($h_start, $vac_s);
+                $overlap_end = min($h_end, $vac_e);
+                if ($overlap_start <= $overlap_end) {
+                    $cur = clone $overlap_start;
+                    while ($cur <= $overlap_end) {
+                        $holiday_date_set[$cur->format('Y-m-d')] = true;
+                        $cur->modify('+1 day');
+                    }
+                    $holiday_list[] = [
+                        'name'  => $h['holiday_name'] ?? __('holiday'),
+                        'start' => $overlap_start->format('Y-m-d'),
+                        'end'   => $overlap_end->format('Y-m-d'),
+                        'days'  => (int)$overlap_start->diff($overlap_end)->days + 1,
+                    ];
+                }
+            } catch (Exception $e) {
+                // Skip malformed holiday rows.
+            }
+        }
+
+        // Weekend days are shown for transparency only — the approval logic does
+        // NOT exclude them from the balance deduction, only official holidays are.
+        $weekend_day_numbers = get_weekend_days($emp_company_id, $emp_dept_id);
+        $weekend_dates = [];
+        $cur = clone $vac_s;
+        while ($cur <= $vac_e) {
+            if (in_array((int)$cur->format('w'), $weekend_day_numbers, true)) {
+                $weekend_dates[] = $cur->format('Y-m-d');
+            }
+            $cur->modify('+1 day');
+        }
+
+        $holiday_days_count = count($holiday_date_set);
+        $weekend_days_count = count($weekend_dates);
+        $deductible_days = max(0, $applied_days - $holiday_days_count);
+
+        $holiday_breakdown = [
+            'holiday_days'     => $holiday_days_count,
+            'weekend_days'     => $weekend_days_count,
+            'deductible_days'  => $deductible_days,
+            'holidays'         => $holiday_list,
+        ];
+    }
+
+    // Approval Timeline Logic - NEW CHAIN APPROVAL SYSTEM
+    // Fetch approval chain for this request
+    $request_inv_no = $request['request_inv_no'] ?? '';
+    $current_status = $request['current_status'] ?? 'pending_approval';
+    $is_cancelled_by_employee = ($current_status === 'cancelled');
+    // Rejected/cancelled requests never actually deducted balance or triggered payroll -
+    // don't show holiday/salary/payroll/payment sections as if they took effect.
+    $request_is_finalized_negatively = in_array($current_status, ['rejected', 'cancelled'], true);
+
+    // Determine who actually cancelled the request (self vs HR/admin on their behalf).
+    $cancelled_by_emp_id = trim((string)($request['cancelled_by'] ?? ''));
+    $cancelled_request_owner_id = trim((string)($request['emp_id'] ?? ''));
+    $cancelled_by_someone_else = ($is_cancelled_by_employee && $cancelled_by_emp_id !== '' && $cancelled_by_emp_id !== $cancelled_request_owner_id);
+    $cancelled_by_label = $cancelled_by_someone_else
+        ? __('cancelled_by', 'Cancelled by') . ' ' . htmlspecialchars((!empty($request['cancelled_by_name'])) ? parseName($request['cancelled_by_name']) : $cancelled_by_emp_id)
+        : __('cancelled_by_employee');
+
+    // Initialize approval chain array
+    $approval_chain = [];
+
+    // Employee-cancelled requests have no active approval chain.
+    if ($is_cancelled_by_employee) {
+        $request_inv_no = '';
+    }
+    
+    // Only fetch chain if we have a request_inv_no (new system)
+    if (!empty($request_inv_no)) {
+        // Get the request type ID for vacation_request
+        $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'vacation_request' LIMIT 1");
+        if ($type_query && mysqli_num_rows($type_query) > 0) {
+            $request_type_row = mysqli_fetch_assoc($type_query);
+            $request_type_id = (int)$request_type_row['id'];
+            mysqli_free_result($type_query);
+            
+            // Fetch the approval chain
+            if ($request_type_id > 0) {
+          // Include approver's department to classify clearance by department (more reliable than user_type)
+          $chain_sql = "SELECT ra.*, 
+                       e.name AS approver_name, 
+                       e.emp_id AS approver_emp_id, 
+                       e.avatar AS approver_avatar, e.sex AS approver_sex,
+                       al.user_type AS approver_role,
+                       d2.dep_nme AS approver_dept_name
+                   FROM request_approvers ra
+                   LEFT JOIN employees e ON ra.approver_id = e.emp_id
+                   LEFT JOIN admin_login al ON e.emp_id = al.emp_id
+                   LEFT JOIN department d2 ON e.dept = d2.id
+                   WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
+                   ORDER BY ra.approval_level ASC";
+                $stmt_chain = $conDB->prepare($chain_sql);
+                if ($stmt_chain) {
+                    $stmt_chain->bind_param("si", $request_inv_no, $request_type_id);
+                    $stmt_chain->execute();
+                    $chain_result = $stmt_chain->get_result();
+                    while ($chain_row = $chain_result->fetch_assoc()) {
+                        $approval_chain[] = $chain_row;
+                    }
+                    $stmt_chain->close();
+                }
+            }
+        }
+    }
+
+    // Attachments open from the screen header bar (not part of the printed report)
+    $attachments = [];
+    if (!empty($request['attachment_path'])) {
+        $attachments = json_decode($request['attachment_path'], true);
+        if (!is_array($attachments)) {
+            $attachments = [$request['attachment_path']];
+        }
+        $attachments = array_values(array_filter($attachments));
+    }
+
+    // ---- Shared report layout (includes/report_layout.php): header, employee banner, chain, signatures, footer ----
+    $report = [
+        'title'      => __('vacation_request_report'),
+        'request_no' => !empty($request['request_inv_no']) ? $request['request_inv_no'] : ('#' . (int)($request['id'] ?? 0)),
+        'status'     => $current_status,
+        'dates'      => [__('requested_on', 'Requested on') => $request['created_at'] ?? null],
+        'emp_id'     => (string)($request['emp_id'] ?? $emp_id),
+        'actions'    => $attachments ? [[
+            'label'   => __('view_attachments', 'View Attachments'),
+            'icon'    => 'mdi-paperclip',
+            'count'   => count($attachments),
+            'onclick' => 'showAttachmentsModal(' . json_encode($attachments) . ', ' . json_encode(__('attachments')) . ')',
+        ]] : [],
+    ];
+    include dirname(__DIR__) . '/report_open.php';
+?>
+                                <?php if ($current_status === 'rejected'): ?>
+                                <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" style="font-weight: 600;">
+                                    <i class="fa fa-times-circle"></i>
+                                    <span><?= __('request_rejected') ?? 'Request Rejected' ?> - <?= __('this_request_was_not_approved_no_impact') ?? 'This request was not approved and had no effect on payroll or vacation balance.' ?></span>
+                                </div>
+                                <?php elseif ($is_cancelled_by_employee): ?>
+                                <div class="alert alert-secondary d-flex align-items-center gap-2 mb-3" style="font-weight: 600;">
+                                    <i class="fa fa-ban"></i>
+                                    <span><?= $cancelled_by_label ?> - <?= __('this_request_was_cancelled_no_impact') ?? 'This request was cancelled and had no effect on payroll or vacation balance.' ?></span>
+                                </div>
+                                <?php endif; ?>
+
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-calendar-alt"></i><?= __('vacation_details') ?></h5>
+                                    <div class="grid-details">
+                                        <div class="detail-item"><span class="label"><?= __('vacation_type') ?></span> <span class="value"><small><?= getDisplayName($request['vac_type'] ?? null); ?><?= getDisplayName($request['fly_type']) ? ' | ' . getDisplayName($request['fly_type']) : '' ?></small></span></div>
+                                        <?php if ($request['vac_type'] !== 'Encashed'): ?>
+                                        <div class="detail-item"><span class="label"><?= __('start_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['start_date']) ? date('d M Y', strtotime($request['start_date'])) : null); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['return_date']) ? date('d M Y', strtotime($request['return_date'])) : null); ?></small></span></div>
+                                        <?php endif; ?>
+                                        <div class="detail-item"><span class="label"><?= __('vacation_days') ?></span> <span class="value highlight"><small><?= display_or_na($applied_days); ?> <?= __('days') ?></small></span></div>
+                                        <?php if ($can_view_remaining_balance && $remaining_vacation_balance !== null): ?>
+                                        <div class="detail-item"><span class="label"><?= __('remaining_vacation_balance', 'Remaining Vacation Balance') ?></span> <span class="value highlight"><small><?= number_format((float)$remaining_vacation_balance, 2); ?> <?= __('days') ?></small></span></div>
+                                        <?php endif; ?>
+                                        <?php
+                                        // MySQL stores unset dates as '0000-00-00' (not NULL), which passes !empty()
+                                        // but produces garbage when parsed as a DateTime - treat it as no date at all.
+                                        $has_departure_date = !empty($request['departure_date']) && $request['departure_date'] !== '0000-00-00';
+                                        $has_arrival_date = !empty($request['arrival_date']) && $request['arrival_date'] !== '0000-00-00';
+
+                                        // Calculate flight days if both departure and arrival dates exist
+                                        $flight_days = 0;
+                                        if ($has_departure_date && $has_arrival_date) {
+                                            $departure_date_obj = new DateTime($request['departure_date']);
+                                            $arrival_date_obj = new DateTime($request['arrival_date']);
+                                            $flight_interval = $departure_date_obj->diff($arrival_date_obj);
+                                            $flight_days = $flight_interval->days + 1; // Include both departure and arrival days
+                                        }
+                                        ?>
+                                        <?php if ($has_departure_date && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
+                                            <div class="detail-item"><span class="label"><?= __('departure_date') ?></span> <span class="value"><small><?= display_or_na(date('d M Y', strtotime($request['departure_date']))); ?></small></span></div>
+                                        <?php endif; ?>
+                                        <?php if ($has_arrival_date && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
+                                            <div class="detail-item"><span class="label"><?= __('arrival_date') ?></span> <span class="value"><small><?= display_or_na(date('d M Y', strtotime($request['arrival_date']))); ?></small></span></div>
+                                        <?php endif; ?>
+                                        <?php if ($flight_days > 0 && $ticket_fee > 0): ?>
+                                            <div class="detail-item"><span class="label"><?= __('flight_days') ?? 'Flight Days' ?></span> <span class="value highlight"><small><?= display_or_na($flight_days); ?> <?= __('days') ?></small></span></div>
+                                        <?php endif; ?>
+                                        <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?= getDisplayName(($request['replacement_person_name'] ?? '') !== '' ? $request['replacement_person_name'] : __('not_available')); ?></small></span></div>
+                                        
+                                        <?php if ($request['vac_type'] === 'Business Trip'): ?>
+                                            <div class="detail-item"><span class="label"><?= __('accommodation_provided') ?></span> <span class="value"><small><?= ucfirst($request['accommodation_provided'] ?? 'N/A'); ?></small></span></div>
+                                            <div class="detail-item"><span class="label"><?= __('transportation_provided') ?></span> <span class="value"><small><?= ucfirst($request['transportation_provided'] ?? 'N/A'); ?></small></span></div>
+                                        <?php endif; ?>
+                                        
+                                        <div class="detail-item"><span class="label"><?= __('requested_on') ?></span> <span class="value"><small><?= display_or_na(!empty($request['created_at']) ? date('d M Y, h:i A', strtotime($request['created_at'])) : null); ?></small></span></div>
+                                        <?php if (!empty($attachments)): ?>
+                                            <div class="detail-item no-print">
+                                                <span class="label"><?= __('attachments') ?></span>
+                                                <span class="value">
+                                                    <button type="button" class="rpt-inline-btn" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")'>
+                                                        <i class="mdi mdi-paperclip"></i> <?= __('view_attachments') ?> (<?= count($attachments) ?>)
+                                                    </button>
+                                                </span>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+
+                                <?php if ($request_is_finalized_negatively): ?>
+                                <div class="report-section">
+                                    <div class="alert alert-secondary mb-0">
+                                        <i class="fa fa-info-circle"></i>
+                                        <?= __('no_holiday_salary_payroll_info_for_unfinalized_request') ?? 'Holiday deduction, vacation salary and payroll details are not shown because this request was not approved.' ?>
+                                    </div>
+                                </div>
+                                <?php else: ?>
+
+                                <?php if ($holiday_breakdown !== null && $holiday_breakdown['holiday_days'] > 0): ?>
+                                <div class="text-center mb-3 no-print">
+                                    <button type="button" class="btn btn-outline-primary waves-effect waves-light" id="toggleHolidayBreakdownBtn" onclick="toggleHolidayBreakdown()">
+                                        <i class="fa fa-eye mr-2"></i><?= __('view_holiday_deduction_breakdown', 'View Holiday & Balance Deduction Breakdown') ?>
+                                    </button>
+                                </div>
+                                <div id="holidayBreakdownContainer" style="display: none;">
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-calendar-check"></i><?= __('holiday_deduction_breakdown', 'Holiday & Balance Deduction Breakdown') ?></h5>
+                                    <div class="grid-details mb-3">
+                                        <div class="detail-item"><span class="label"><?= __('total_days_requested', 'Total Days Requested') ?></span> <span class="value"><small><?= number_format($applied_days, 2); ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('official_holidays_in_period', 'Official Holidays in Period') ?></span> <span class="value"><small><?= (int)$holiday_breakdown['holiday_days']; ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('weekend_days_in_period', 'Weekend Days in Period') ?></span> <span class="value"><small><?= (int)$holiday_breakdown['weekend_days']; ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('deductible_days_from_balance', 'Deductible Days (Charged to Balance)') ?></span> <span class="value highlight"><small><?= number_format($holiday_breakdown['deductible_days'], 2); ?> <?= __('days') ?></small></span></div>
+                                    </div>
+
+                                    <?php if (!empty($holiday_breakdown['holidays'])): ?>
+                                    <div class="payment-summary mb-3">
+                                        <ul>
+                                            <?php foreach ($holiday_breakdown['holidays'] as $hol): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label"><?= htmlspecialchars($hol['name']); ?></span>
+                                                    <small class="text-muted d-block">
+                                                        <?= $hol['start'] === $hol['end']
+                                                            ? date('d M Y', strtotime($hol['start']))
+                                                            : date('d M Y', strtotime($hol['start'])) . ' - ' . date('d M Y', strtotime($hol['end'])); ?>
+                                                    </small>
+                                                </div>
+                                                <span class="value"><?= (int)$hol['days']; ?> <?= __('day_s', 'Days') ?></span>
+                                            </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    </div>
+                                    <?php else: ?>
+                                    <p class="text-muted mb-3"><i class="fa fa-info-circle"></i> <?= __('no_official_holidays_in_period', 'No official holidays fall within this vacation period.') ?></p>
+                                    <?php endif; ?>
+
+                                    <?php
+                                        // Contextual note mirroring the exact rule in update_vacation_balance_on_approval():
+                                        // only official holiday days are excluded from the deduction; weekends still count.
+                                        if ($is_emergency) {
+                                            $deduction_note_class = 'alert-secondary';
+                                            $deduction_note_icon = 'fa-ban';
+                                            $deduction_note_text = __('emergency_leave_no_balance_impact', 'Emergency leave does not deduct from the annual vacation balance — none of the days above affect it.');
+                                        } elseif ($is_encashment) {
+                                            $deduction_note_class = 'alert-warning';
+                                            $deduction_note_icon = 'fa-coins';
+                                            $deduction_note_text = __('encashment_full_days_deducted', 'Encashment always deducts the full requested day count from the balance; the holiday exclusion above does not apply.');
+                                        } elseif ($vac_type === 'Local Vacation' && $fly_type === 'annual') {
+                                            $deduction_note_class = 'alert-info';
+                                            $deduction_note_icon = 'fa-info-circle';
+                                            $deduction_note_text = sprintf(
+                                                __('local_annual_deduction_note', 'Official holiday days above are excluded from the balance deduction; weekend days are still counted. %s of %s days will be deducted from the balance on approval.'),
+                                                number_format($holiday_breakdown['deductible_days'], 2),
+                                                number_format($applied_days, 2)
+                                            );
+                                        } elseif ($vac_type === 'Fly' && $fly_type === 'annual') {
+                                            $deduction_note_class = 'alert-info';
+                                            $deduction_note_icon = 'fa-plane';
+                                            $deduction_note_text = sprintf(
+                                                __('fly_annual_deduction_note', 'For Fly Annual vacations, the balance is deducted on rejoin using this same holiday-exclusion rule — %s of %s days will be charged.'),
+                                                number_format($holiday_breakdown['deductible_days'], 2),
+                                                number_format($applied_days, 2)
+                                            );
+                                        } else {
+                                            $deduction_note_class = 'alert-secondary';
+                                            $deduction_note_icon = 'fa-info-circle';
+                                            $deduction_note_text = __('leave_type_no_balance_impact', 'This leave type does not deduct from the annual vacation balance.');
+                                        }
+                                    ?>
+                                    <div class="alert <?= $deduction_note_class ?> mb-0">
+                                        <i class="fa <?= $deduction_note_icon ?>"></i> <?= $deduction_note_text ?>
+                                    </div>
+                                </div>
+                                </div>
+                                <script>
+                                function toggleHolidayBreakdown() {
+                                    const container = document.getElementById('holidayBreakdownContainer');
+                                    const btn = document.getElementById('toggleHolidayBreakdownBtn');
+
+                                    if (container.style.display === 'none' || container.style.display === '') {
+                                        container.style.display = 'block';
+                                        btn.innerHTML = '<i class="fa fa-eye-slash mr-2"></i><?= __('hide_holiday_deduction_breakdown', 'Hide Holiday & Balance Deduction Breakdown') ?>';
+                                    } else {
+                                        container.style.display = 'none';
+                                        btn.innerHTML = '<i class="fa fa-eye mr-2"></i><?= __('view_holiday_deduction_breakdown', 'View Holiday & Balance Deduction Breakdown') ?>';
+                                    }
+                                }
+                                </script>
+                                <?php endif; ?>
+
+                                <?php if (!$is_encashment && !$is_non_payable_leave && $meets_min_days_for_salary_choice): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('vacation_salary_payment') ?? 'Vacation Salary Payment' ?></h5>
+                                    <?php if ($vacation_salary_payment_yes): ?>
+                                        <div class="alert alert-success mb-0">
+                                            <i class="fa fa-check-circle"></i>
+                                            <strong><?= __('selected') ?? 'Selected' ?>: <?= __('yes') ?? 'Yes' ?></strong>
+                                            <p class="mb-0 mt-2"><?= __('vacation_salary_payroll_message') ?? 'The employee selected Yes. Vacation salary will be paid now with payroll (based on approved vacation days and payroll rules).' ?></p>
+                                        </div>
+                                    <?php elseif ($vacation_salary_payment_no): ?>
+                                        <div class="alert alert-info mb-0">
+                                            <i class="fa fa-info-circle"></i>
+                                            <strong><?= __('selected') ?? 'Selected' ?>: <?= __('no') ?? 'No' ?></strong>
+                                            <p class="mb-0 mt-2"><?= __('vacation_salary_eos_message') ?? 'The employee selected No. Vacation salary is deferred and will be paid with the end of service settlement.' ?></p>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="alert alert-secondary mb-0">
+                                            <i class="fa fa-question-circle"></i>
+                                            <strong><?= __('vacation_salary_payment') ?? 'Vacation Salary Payment' ?>:</strong>
+                                            <span><?= __('not_available') ?? 'Not available' ?></span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
+                                
+                                <?php 
+                                    // Show bank payment information only if:
+                                    // 1. Request is approved AND
+                                    // 2. Current user is finance officer OR system admin
+                                    $show_bank_info = false;
+                                    if ($current_status == 'approved' ||$current_status == 'completed') {
+                                        $show_bank_info = $isFinance_Officer || $is_system_admin || $isHR_Payroll;
+                                    }
+                                ?>
+
+                                <?php if ($show_bank_info): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-university"></i><?= __('bank_payment_information') ?? 'Bank Payment Information' ?></h5>
+                                    <div class="grid-details">
+                                        <div class="detail-item">
+                                            <span class="label"><?= __('bank_name') ?></span>
+                                            <span class="value">
+                                                <?php 
+                                                    $bank_display = '';
+                                                    if (!empty($request['bank_name_en']) || !empty($request['bank_name_ar'])) {
+                                                        // Prefer bank_list data
+                                                        $bank_display = ($is_rtl ?? false) ? $request['bank_name_ar'] : $request['bank_name_en'];
+                                                    } elseif (!empty($request['bank_name'])) {
+                                                        // Fallback to employee bank_name field
+                                                        $bank_display = $request['bank_name'];
+                                                    }
+                                                    echo !empty($bank_display) ? htmlspecialchars($bank_display) : '<em class="text-muted">' . __('not_provided') . '</em>';
+                                                ?>
+                                            </span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label"><?= __('iban') ?? 'IBAN' ?></span>
+                                            <span class="value font-monospace">
+                                                <?= !empty($request['iban']) ? htmlspecialchars($request['iban']) : '<em class="text-muted">' . __('not_provided') . '</em>' ?>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php endif;
+                                // Hide payment details if:
+                                // 1. Emergency vacation, OR
+                                // 2. Encashment request (but show custom encashment section), OR
+                                // 3. Fly + Annual OR Local Vacation + Annual (is_deductible = 0, employee stays in full payroll)
+                                // Note: end_of_service type will show payment details but only working days salary
+                                $is_encashment_request = (trim(strtolower($request['vac_type'] ?? '')) === 'encashed');
+                                $is_annual_non_deductible = (
+                                    ($request['vac_type'] === 'Fly' || $request['vac_type'] === 'Local Vacation') && 
+                                    $request['raw_fly_type'] === 'annual' && 
+                                    isset($request['is_deductible']) && 
+                                    $request['is_deductible'] == 0
+                                );
+                                $hide_payment_details = ($request['raw_fly_type'] === 'emergency') || $is_encashment_request || $is_annual_non_deductible;
+                                ?>
+                                
+                                    <?php if ($is_encashment_request): 
+                                        // Get encashment details from database
+                                        $encashment_amount = round((float)($request['encashment_amount'] ?? 0));
+                                        $days_encashed = (float)($request['vacdays'] ?? 0);
+                                        $days_encashed_raw = isset($request['vacdays']) ? (string)$request['vacdays'] : '0';
+                                        // Match backend rule: daily rate is based on total salary benefits / 30.
+                                        $salary_benefits_total = 0;
+                                        if (!empty($salary)) {
+                                            $salary_benefits_total =
+                                                (float)($salary['basic'] ?? 0) +
+                                                (float)($salary['housing'] ?? 0) +
+                                                (float)($salary['transport'] ?? 0) +
+                                                (float)($salary['food'] ?? 0) +
+                                                (float)($salary['misc'] ?? 0) +
+                                                (float)($salary['cashier'] ?? 0) +
+                                                (float)($salary['fuel'] ?? 0) +
+                                                (float)($salary['tel'] ?? 0) +
+                                                (float)($salary['other'] ?? 0) +
+                                                (float)($salary['guard'] ?? 0);
+                                        }
+
+                                        $daily_rate_display = ($salary_benefits_total > 0)
+                                            ? round($salary_benefits_total / 30, 2)
+                                            : (($days_encashed > 0) ? round($encashment_amount / $days_encashed, 2) : 0);
+                                        $encash_gosi = 0;
+                                        $net_encashment = round($encashment_amount - $encash_gosi);
+                                    ?>
+                                    <div class="report-section">
+                                        <h5 class="section-title"><i class="fa fa-coins"></i><?= __('encashment_payment_details') ?? 'Encashment Payment Details' ?></h5>
+                                        <div class="alert alert-success mb-3">
+                                            <i class="fa fa-info-circle"></i> <strong><?= __('vacation_balance_encashment') ?? 'Vacation Balance Encashment' ?></strong>
+                                            <p class="mb-0 mt-2"><?= __('employee_opted_encash_message') ?? 'The employee has chosen to encash vacation days instead of taking time off.' ?></p>
+                                        </div>
+                                        <div class="payment-summary">
+                                            <ul>
+                                                <li>
+                                                    <div>
+                                                        <span class="label"><?= __('encashed_vacation_days') ?? 'Encashed Vacation Days' ?></span>
+                                                        <small class="text-muted d-block"><?= __('days_converted_to_cash') ?? 'Days converted to cash payment' ?></small>
+                                                    </div>
+                                                    <span class="value">
+                                                        <?= number_format($days_encashed, 2); ?> <?= __('day_s') ?? 'Days' ?>
+                                                    </span>
+                                                </li>
+                                                <li>
+                                                    <div>
+                                                        <span class="label"><?= __('daily_salary_rate') ?? 'Daily Salary Rate' ?></span>
+                                                        <small class="text-muted d-block"><?= __('monthly_salary_divided_30') ?? 'Monthly salary ÷ 30 days' ?></small>
+                                                    </div>
+                                                    <span class="value"><i class="icon-saudi_riyal"></i> <?= number_format($daily_rate_display, 2); ?></span>
+                                                </li>
+                                                <li>
+                                                    <div>
+                                                        <span class="label"><?= __('gross_encashment_amount') ?? 'Gross Encashment Amount' ?></span>
+                                                        <small class="text-muted d-block"><?= __('days_x_daily_rate') ?? 'Days × Daily Rate' ?></small>
+                                                    </div>
+                                                    <span class="value"><i class="icon-saudi_riyal"></i> <?= number_format($encashment_amount, 2); ?></span>
+                                                </li>
+                                                <?php if ($encash_gosi > 0): ?>
+                                                <li>
+                                                    <span class="label text-danger"><?= __('gosi_deduction') ?? 'GOSI Deduction' ?> (<?= number_format($request['gosi'], 1); ?>%)</span>
+                                                    <span class="value text-danger">-<i class="icon-saudi_riyal"></i> <?= number_format($encash_gosi, 2); ?></span>
+                                                </li>
+                                                <?php endif; ?>
+                                                <li class="total-payable">
+                                                    <span class="label"><?= __('total_encashment_payment') ?? 'Total Encashment Payment' ?></span>
+                                                    <span class="value"><i class="icon-saudi_riyal"></i> <?= number_format($net_encashment, 2); ?></span>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        <div class="alert alert-info mt-3 mb-0">
+                                            <i class="fa fa-info-circle"></i> <strong><?= __('note') ?? 'Note' ?>:</strong> <?= __('encashment_deducts_balance') ?? 'This encashment will deduct the specified days from the employee vacation balance.' ?>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                
+                                <?php if ($vacation_salary_type === 'end_of_service' && $meets_min_days_for_salary_choice): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-info-circle"></i><?= __('vacation_salary_information') ?></h5>
+                                    <div class="alert alert-info mb-0">
+                                        <i class="fa fa-piggy-bank"></i> <strong><?= __('vacation_salary_deferred_eos') ?></strong>
+                                        <p class="mb-2 mt-2"><?= str_replace('{days}', htmlspecialchars($applied_days), __('employee_chosen_receive_vacation_salary_eos')) ?></p>
+                                        <ul class="mb-0 pl-4">
+                                            <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?></strong></li>
+                                            <li><?= __('payment') ?>: <strong><?= __('end_of_service_settlement') ?></strong></li>
+                                            <li><?= __('amount_calculated_added_final_settlement') ?></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                                
+                                <?php // Hide payroll info for employees
+                                    if ($is_local_annual && !$is_local_annual_removed_from_payroll && (empty($isEmployee) || $isEmployee === false)): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-briefcase"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
+                                    <div class="alert alert-success mb-0">
+                                        <i class="fa fa-check-circle"></i> <strong><?= __('employee_active_in_payroll') ?? 'Employee Active in Payroll' ?></strong>
+                                        <p class="mb-2 mt-2"><?= __('local_annual_vacation_payroll_message') ?? 'This is a Local Annual vacation. The employee will remain active in the payroll system and receive their complete monthly salary as per normal.' ?></p>
+                                        <ul class="mb-0 pl-4">
+                                            <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
+                                            <li><?= __('payroll_status') ?>: <strong><?= __('active_full_salary') ?? 'Active - Full Salary' ?></strong></li>
+                                            <li><?= __('vacation_days_deducted') ?? 'Vacation Days Deducted' ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
+                                            <li><?= __('salary_deduction') ?? 'Salary Deduction' ?>: <strong><?= __('none') ?? 'None' ?></strong></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php if ($is_local_annual_removed_from_payroll && (empty($isEmployee) || $isEmployee === false)): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-user-minus"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
+                                    <div class="alert alert-warning mb-0">
+                                        <i class="fa fa-exclamation-circle"></i>
+                                        <strong><?= __('employee_removed_from_active_payroll') ?? 'Employee Removed from Active Payroll' ?></strong>
+                                        <p class="mb-2 mt-2"><?= __('local_annual_saudi_long_leave_payroll_message') ?? ('This is a Saudi Local Annual vacation with Vacation Salary Payment set to Yes and vacation days above ' . (int)$local_annual_min_days_exclusive . '. The employee is removed from active payroll for this period.') ?></p>
+                                        <ul class="mb-0 pl-4">
+                                            <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
+                                            <li><?= __('payroll_status') ?>: <strong><?= __('removed_from_active_payroll') ?? 'Removed from Active Payroll' ?></strong></li>
+                                            <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
+                                            <li><?= __('country') ?? 'Country' ?>: <strong><?= (((int)($request['country_id'] ?? 0) === 191) ? __('saudi_arabia', 'Saudi Arabia') : getDisplayName($request['country_name'] ?? null)); ?></strong></li>
+                                        </ul>
+                                        <?php
+                                            $used_below_min_days_override = $allow_vacation_salary_below_min_days && (
+                                                $approved_days < $local_annual_min_days_exclusive
+                                                || (int)($request['country_id'] ?? 0) !== 191
+                                            );
+                                        ?>
+                                        <?php if ($used_below_min_days_override): ?>
+                                        <hr>
+                                        <p class="mb-0"><i class="fa fa-info-circle"></i> <?= __('vacation_salary_below_min_days_override_note') ?? ('This employee is individually authorized (Employee Master) to receive the vacation salary payout regardless of nationality and even though the approved days are below the normal ' . (int)$local_annual_min_days_exclusive . '-day minimum.') ?></p>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php if (((($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') || $is_emergency): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('payment_details') ?? 'Payment Details' ?></h5>
+                                    <div class="payment-summary">
+                                        <ul>
+                                            <?php if (($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll || $is_emergency): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>
+                                                    <?php if ($is_full_working_month): ?>
+                                                    <small class="text-muted d-block"><?= __('full_month_worked') ?? 'Full month worked' ?> (<?= htmlspecialchars($working_days); ?>/<?= htmlspecialchars($working_days_month_days); ?> <?= __('days') ?? 'days' ?>) = <i class="icon-saudi_riyal"></i> <?= number_format($total_monthly_salary, 2); ?></small>
+                                                    <?php else: ?>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?> × <i class="icon-saudi_riyal"></i> <?= number_format($working_days_daily_rate_display, 2); ?>/day (<i class="icon-saudi_riyal"></i> <?= number_format($total_monthly_salary, 2); ?> ÷ <?= $working_days_divisor_display; ?> <?= __('days') ?? 'days' ?>)</small>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($working_days_salary, 2); ?></span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if (!$is_emergency): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label"><?= __('vacation_salary') ?? 'Vacation Salary' ?><?php if ($salaries_earned > 1): ?> <span style="color: #28a745; font-weight: 700;">x<?= (int)$salaries_earned ?></span><?php endif; ?></span>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($applied_days); ?> <?= __('days') ?? 'days' ?> × <i class="icon-saudi_riyal"></i> <?= number_format($daily_rate, 2); ?>/day (<i class="icon-saudi_riyal"></i> <?= number_format($total_monthly_salary, 2); ?> ÷ <?= $days_in_month; ?> days)</small>
+                                                </div>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($vacation_salary, 2); ?></span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($overtime_amount > 0): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label text-success"><?= __('overtime_payment') ?? 'Overtime Payment' ?></span>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($overtime_hours) ?> <?= __('hours') ?? 'hours' ?> @ <i class="icon-saudi_riyal"></i> <?= number_format($overtimeHourlyRate ?? 0, 2) ?>/hr</small>
+                                                </div>
+                                                <span class="value text-success">+<i class="icon-saudi_riyal"></i> <?=number_format($overtime_amount, 2); ?></span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($other_earnings > 0): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label text-success"><?= __('other_earnings') ?? 'Other Earnings' ?></span>
+                                                    <small class="text-muted d-block"><?= __('other_earnings_manual_adjustment') ?? 'Manual other earnings adjustment' ?></small>
+                                                </div>
+                                                <span class="value text-success">+<i class="icon-saudi_riyal"></i> <?=number_format($other_earnings, 2); ?></span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($ticket_fee > 0): ?>
+                                            <li class="text-warning">
+                                                <div>
+                                                    <span class="label"><?= __('ticket_payment') ?? 'Ticket Payment' ?></span>
+                                                    <small class="text-muted d-block"><?= __('ticket_fares_will_not_be_added_in_total_payable_amount') ?? 'Ticket fares will not be added in total payable amount.' ?></small>
+                                                </div>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($ticket_fee, 2); ?></span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($permit_fee > 0): ?>
+                                            <li class="text-warning">
+                                                <div>
+                                                    <span class="label"><?= __('permit_fee') ?? 'Permit Fee' ?></span>
+                                                    <small class="text-muted d-block"><?= __('permit_fees_will_not_be_added_in_total_payable_amount') ?? 'Permit fees will not be added in total payable amount.' ?></small>
+                                                </div>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($permit_fee, 2); ?></span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($deduction_amount > 0): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label text-danger"><?= __('deductions') ?? 'Deductions' ?></span>
+                                                    <small class="text-muted d-block">
+                                                        <?php if ($deduction_hours > 0): ?>
+                                                            <?= htmlspecialchars($deduction_hours) ?> <?= __('hours') ?? 'hours' ?> @ <i class="icon-saudi_riyal"></i> <?= number_format($hourlyRateDeduction ?? 0, 2) ?>/hr
+                                                        <?php endif; ?>
+                                                        <?php if ($deduction_days > 0): ?>
+                                                            <?php if ($deduction_hours > 0) echo ' + '; ?>
+                                                            <?= htmlspecialchars($deduction_days) ?> <?= __('days') ?? 'days' ?> @ <i class="icon-saudi_riyal"></i> <?= number_format($dailyRateDeduction ?? 0, 2) ?>/day
+                                                        <?php endif; ?>
+                                                        <?php if ($other_deductions > 0): ?>
+                                                            <?php if ($deduction_hours > 0 || $deduction_days > 0) echo ' + '; ?>
+                                                            <?= __('other_deductions') ?? 'Other Deductions' ?>
+                                                        <?php endif; ?>
+                                                    </small>
+                                                </div>
+                                                <span class="value text-danger">-<i class="icon-saudi_riyal"></i> <?=number_format($deduction_amount, 2); ?></span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($gosi_deduction > 0): ?>
+                                            <li>
+                                                <span class="label text-danger"><?= __('gosi_deduction') ?? 'GOSI Deduction' ?> (<?= number_format($request['gosi'] ?? 0, 1); ?>%)</span>
+                                                <span class="value text-danger">-<i class="icon-saudi_riyal"></i> <?=number_format($gosi_deduction, 2); ?></span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <li class="total-payable">
+                                                <span class="label"><?= __('total_payable') ?? 'Total Payable' ?></span>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($total_payable, 2); ?></span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <?php if (!empty($payroll_note)): ?>
+                                    <div class="alert alert-warning mt-3 mb-0">
+                                        <i class="fa fa-sticky-note"></i> <strong><?= __('payroll_note') ?? 'Payroll Note' ?>:</strong> <?= htmlspecialchars($payroll_note); ?>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php endif; // $request_is_finalized_negatively ?>
+
+                                <?php if(!empty($request['remarks']) || !empty($request['note'])): ?>
+                                <div class="report-section">
+                                     <h5 class="section-title"><i class="fa fa-comments"></i><?= __('remarks') ?></h5>
+                                     <?php if($current_status == 'rejected' && trim((string)($request['note'] ?? '')) !== ''): ?>
+                                        <div class="alert alert-danger mb-0"><?=getDisplayName(nl2br(htmlspecialchars((string)($request['note'] ?? '')))); ?></div>
+                                     <?php elseif(!empty($request['remarks'])): ?>
+                                        <div class="notes-section"><p class="mb-0"><?=getDisplayName(nl2br(htmlspecialchars($request['remarks']))); ?></p></div>
+                                     <?php endif; ?>
+                                </div>
+                                        <?php endif; ?>
+
+
+                                <?php // ASSET CLEARANCE SECTION - Only show if employee has assets
+                                if (!empty($assigned_assets)): 
+                                    // Check if any asset clearance approver has acted on this request
+                                    $asset_clearance_happened = false;
+                                    $asset_clearance_approvers = [];
+                                    
+                                    if (!empty($approval_chain)) {
+                                        foreach ($approval_chain as $approver) {
+                                            $role_lower = strtolower($approver['approver_role'] ?? '');
+                                            $dept_lower = strtolower($approver['approver_dept_name'] ?? '');
+                                            
+                                            // Normalize dept names into categories (handles synonyms/abbreviations)
+                                            $dept_is_it = (
+                                                $dept_lower === 'it' ||
+                                                $dept_lower === 'information technology' ||
+                                                stripos($dept_lower, 'information technology') !== false ||
+                                                stripos($dept_lower, 'technology') !== false ||
+            	                                stripos($dept_lower, 'technical support') !== false
+                                            );
+                                            $dept_is_admin = (
+                                                $dept_lower === 'admin' ||
+                                                $dept_lower === 'administration' ||
+                                                stripos($dept_lower, 'administration') !== false ||
+                                                stripos($dept_lower, 'general admin') !== false ||
+                                                stripos($dept_lower, 'general administration') !== false
+                                            );
+                                            $dept_is_transport = (
+                                                $dept_lower === 'transportation' ||
+                                                $dept_lower === 'transport' ||
+                                                stripos($dept_lower, 'transportation') !== false ||
+                                                stripos($dept_lower, 'transport') !== false ||
+                                                stripos($dept_lower, 'fleet') !== false ||
+                                                stripos($dept_lower, 'garage') !== false
+                                            );
+                                            
+                                            // Consider either role keywords OR department categories
+                                            $is_asset_clearance_role = (
+                                                stripos($role_lower, 'it') !== false || $dept_is_it ||
+                                                stripos($role_lower, 'admin') !== false || $dept_is_admin ||
+                                                stripos($role_lower, 'transport') !== false || $dept_is_transport
+                                            );
+                                            if ($is_asset_clearance_role) {
+                                                $asset_clearance_approvers[] = $approver;
+                                                if ($approver['status'] == 'approved') {
+                                                    $asset_clearance_happened = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    if ($asset_clearance_happened):
+                                ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-laptop"></i><?= __('asset_clearance_details') ?></h5>
+                                    
+                                    <?php if (!empty($asset_clearance_approvers)): ?>
+                                    <div class="mb-3">
+                                        <small class="text-muted"><i class="fa fa-info-circle"></i> <?= __('cleared_by') ?></small>
+                                        <?php foreach ($asset_clearance_approvers as $approver): ?>
+                                            <?php if ($approver['status'] == 'approved'): ?>
+                                                <div class="ml-3 mt-1">
+                                                    <small>
+                                                        <i class="fa fa-user-check text-success"></i> 
+                                                        <?= htmlspecialchars($approver['approver_name']) ?> 
+                                                        (<?= htmlspecialchars(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : ucfirst($approver['approver_role'])) ?>)
+                                                        <?php if (!empty($approver['action_date'])): ?>
+                                                            - <?= date('d M Y, h:i A', strtotime($approver['action_date'])) ?>
+                                                        <?php endif; ?>
+                                                    </small>
+                                                </div>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <?php endif; ?>
+                                    
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th><?= __('asset_name') ?></th>
+                                                    <th><?= __('serial_number') ?></th>
+                                                    <th><?= __('asset_type') ?></th>
+                                                    <th><?= __('clearance_status') ?></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($assigned_assets as $asset): 
+                                                    // Determine asset type for better categorization
+                                                    $asset_name_lower = strtolower($asset['asset_name']);
+                                                    $asset_type = __('other');
+                                                    $clearance_dept = 'General';
+                                                    
+                                                    if (stripos($asset_name_lower, 'laptop') !== false || 
+                                                        stripos($asset_name_lower, 'computer') !== false || 
+                                                        stripos($asset_name_lower, 'pc') !== false) {
+                                                        $asset_type = __('it_equipment');
+                                                        $clearance_dept = __('it');
+                                                    } elseif (stripos($asset_name_lower, 'mobile') !== false || 
+                                                               stripos($asset_name_lower, 'phone') !== false || 
+                                                               stripos($asset_name_lower, 'sim') !== false) {
+                                                        $asset_type = __('communication');
+                                                        $clearance_dept = __('administration');
+                                                    } elseif (stripos($asset_name_lower, 'car') !== false || 
+                                                               stripos($asset_name_lower, 'vehicle') !== false) {
+                                                        $asset_type = __('vehicle');
+                                                        $clearance_dept = __('transportation');
+                                                    }
+                                                    
+                                                    // Check if this asset type's department has cleared
+                                                    $cleared_by_dept = false;
+                                                    foreach ($asset_clearance_approvers as $approver) {
+                                                        $role_lower = strtolower($approver['approver_role'] ?? '');
+                                                        $dept_lower = strtolower($approver['approver_dept_name'] ?? '');
+                                                        
+                                                        $dept_is_it = (
+                                                            $dept_lower === 'it' ||
+                                                            $dept_lower === 'information technology' ||
+                                                            stripos($dept_lower, 'information technology') !== false ||
+                                                            stripos($dept_lower, 'technology') !== false ||
+                                                            stripos($dept_lower, 'technical support') !== false
+                                                        );
+                                                        $dept_is_admin = (
+                                                            $dept_lower === 'admin' ||
+                                                            $dept_lower === 'administration' ||
+                                                            stripos($dept_lower, 'administration') !== false ||
+                                                            stripos($dept_lower, 'general admin') !== false ||
+                                                            stripos($dept_lower, 'general administration') !== false
+                                                        );
+                                                        $dept_is_transport = (
+                                                            $dept_lower === 'transportation' ||
+                                                            $dept_lower === 'transport' ||
+                                                            stripos($dept_lower, 'transportation') !== false ||
+                                                            stripos($dept_lower, 'transport') !== false ||
+                                                            stripos($dept_lower, 'fleet') !== false ||
+                                                            stripos($dept_lower, 'garage') !== false
+                                                        );
+                                                        
+                                                        if ($approver['status'] == 'approved') {
+                                                            $match_it = ($clearance_dept == 'IT' && (stripos($role_lower, 'it') !== false || $dept_is_it));
+                                                            $match_admin = ($clearance_dept == 'Administration' && (stripos($role_lower, 'admin') !== false || $dept_is_admin));
+                                                            $match_transport = ($clearance_dept == 'Transportation' && (stripos($role_lower, 'transport') !== false || $dept_is_transport));
+                                                            if ($match_it || $match_admin || $match_transport) {
+                                                                $cleared_by_dept = true;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    $status = $cleared_by_dept ? __('cleared') : __('pending');
+                                                    $badge = $cleared_by_dept ? 'success' : 'warning';
+                                                ?>
+                                                <tr>
+                                                    <td><?= htmlspecialchars($asset['asset_name']); ?></td>
+                                                    <td><?= htmlspecialchars($asset['serial_number']); ?></td>
+                                                    <td><span class="badge badge-secondary"><?= $asset_type ?></span></td>
+                                                    <td>
+                                                        <span class="badge badge-<?= $badge ?>"><?= $status ?></span>
+                                                        <small class="text-muted d-block"><?= $clearance_dept ?></small>
+                                                    </td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <?php elseif ($current_status == 'pending_approval' || $current_status == 'approved'): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-laptop"></i><?= __('asset_clearance_details') ?></h5>
+                                    <div class="alert alert-info mb-3">
+                                        <i class="fa fa-info-circle"></i> <strong><?= __('asset_clearance_required') ?></strong>
+                                        <p class="mb-0 mt-2"><?= __('assigned_assets_message') ?></p>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th><?= __('asset_name') ?></th>
+                                                    <th><?= __('serial_number') ?></th>
+                                                    <th><?= __('asset_type') ?></th>
+                                                    <th><?= __('clearance_department') ?></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($assigned_assets as $asset): 
+                                                    $asset_name_lower = strtolower($asset['asset_name']);
+                                                    $asset_type = 'Other';
+                                                    $clearance_dept = 'General';
+                                                    
+                                                    if (stripos($asset_name_lower, 'laptop') !== false || 
+                                                        stripos($asset_name_lower, 'computer') !== false || 
+                                                        stripos($asset_name_lower, 'pc') !== false) {
+                                                        $asset_type = 'IT Equipment';
+                                                        $clearance_dept = 'IT';
+                                                    } elseif (stripos($asset_name_lower, 'mobile') !== false || 
+                                                               stripos($asset_name_lower, 'phone') !== false || 
+                                                               stripos($asset_name_lower, 'sim') !== false) {
+                                                        $asset_type = 'Communication';
+                                                        $clearance_dept = 'Administration';
+                                                    } elseif (stripos($asset_name_lower, 'car') !== false || 
+                                                               stripos($asset_name_lower, 'vehicle') !== false) {
+                                                        $asset_type = 'Vehicle';
+                                                        $clearance_dept = 'Transportation';
+                                                    }
+                                                ?>
+                                                <tr>
+                                                    <td><?= htmlspecialchars($asset['asset_name']); ?></td>
+                                                    <td><?= htmlspecialchars($asset['serial_number']); ?></td>
+                                                    <td><span class="badge badge-secondary"><?= $asset_type ?></span></td>
+                                                    <td><span class="badge badge-primary"><?= $clearance_dept ?></span></td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <?php endif; // End if ($asset_clearance_happened) ?>
+                                <?php endif; // End if (!empty($assigned_assets)) ?>
+<?php
+    $report_end = [
+        'chain'        => $approval_chain,
+        'chain_status' => (string)$current_status,
+        'chain_notice' => $is_cancelled_by_employee
+            ? approval_steps_notice('slate', 'mdi-cancel', $cancelled_by_label . '<small>' . htmlspecialchars($cancelled_by_someone_else ? "No active approvers. This request was cancelled on the employee's behalf." : 'No active approvers. This request was cancelled by the employee.') . '</small>')
+            : '',
+        'signatures'   => ['compensation_signature', 'hr_manager_signature', 'general_manager_signature'],
+    ];
+    include dirname(__DIR__) . '/report_close.php';
+?>
+<?php
+    $conDB->close();
+}
+?>
+

@@ -481,7 +481,7 @@ if ($can_see_all_depts) {
                                                         $status_text = __($resignation['status']);
                                                         break;
                                                 }
-                                                $report_url = 'resignation_report_details.php?id=' . (int)$resignation['id'] . '&emp_id=' . urlencode($resignation['employee_id']);
+                                                $report_url = 'request_report.php?type=resignation&id=' . (int)$resignation['id'] . '&emp_id=' . urlencode($resignation['employee_id']);
                                                 $view_attrs = 'data-id="' . (int)$resignation['id'] . '"'
                                                     . ' data-emp-id="' . sr_h($resignation['employee_id']) . '"'
                                                     . ' data-iqama="' . sr_h($resignation['iqama']) . '"'

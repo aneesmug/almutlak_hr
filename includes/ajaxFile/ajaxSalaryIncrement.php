@@ -565,11 +565,12 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getSalaryIncrementRepor
 
         $approval_chain = [];
         $chain_stmt = mysqli_prepare($conDB, "SELECT ra.approval_level, ra.status, ra.approver_id, ra.note, ra.action_date, e.name AS approver_name,
-                j.job AS approver_job,
+                j.job AS approver_job, e.avatar AS approver_avatar_raw, e.sex AS approver_sex, d.dep_nme AS approver_dept_name,
                 (SELECT al.user_type FROM admin_login al WHERE al.emp_id = ra.approver_id LIMIT 1) AS approver_role
             FROM request_approvers ra
             LEFT JOIN employees e ON e.emp_id = ra.approver_id
             LEFT JOIN ac_jobs j ON j.id = e.actual_job
+            LEFT JOIN department d ON d.id = e.dept
             WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
             ORDER BY ra.approval_level ASC, ra.id ASC");
         if ($chain_stmt) {
@@ -586,13 +587,18 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getSalaryIncrementRepor
                         'approver_role' => (string)($chain_row['approver_role'] ?? ''),
                         'status' => (string)($chain_row['status'] ?? ''),
                         'note' => (string)($chain_row['note'] ?? ''),
-                        'action_date' => $chain_row['action_date']
+                        'action_date' => $chain_row['action_date'],
+                        'approver_dept_name' => (string)($chain_row['approver_dept_name'] ?? ''),
+                        'approver_avatar_raw' => (string)($chain_row['approver_avatar_raw'] ?? ''),
+                        'approver_sex' => $chain_row['approver_sex'] ?? 1
                     ];
                 }
                 mysqli_free_result($chain_res);
             }
             mysqli_stmt_close($chain_stmt);
         }
+        require_once __DIR__ . '/../approval_steps.php';
+        $approval_chain = approval_steps_api_fields($approval_chain); // + photo / department / short name for the popup stepper
 
         echo json_encode([
             'status' => 'success',

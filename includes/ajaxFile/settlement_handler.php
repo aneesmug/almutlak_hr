@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../includes/session_check.php';
 require_once __DIR__ . '/../../includes/helper_functions.php';
 require_once __DIR__ . '/../../includes/SettlementManager_Corrected.php';
 require_once __DIR__ . '/../../includes/ApprovalChainManager.php';
+require_once __DIR__ . '/../../includes/approval_steps.php';
 require_once __DIR__ . '/../../includes/settlement_attachments_helper.php';
 
 // Initialize managers with both MySQLi and PDO connections
@@ -2103,9 +2104,12 @@ function getSettlementDetails($settlementManager) {
                 SELECT ra.approval_level, ra.approver_id, ra.request_type_id, ra.request_inv_no,
                        ra.action_date, ra.note, ra.status,
                        e.name  AS approver_name,
-                       e.email AS approver_email
+                       e.email AS approver_email,
+                       e.avatar AS approver_avatar_raw, e.sex AS approver_sex,
+                       d.dep_nme AS approver_dept_name
                 FROM request_approvers ra
                 LEFT JOIN employees e ON e.emp_id = ra.approver_id
+                LEFT JOIN department d ON d.id = e.dept
                 WHERE ra.request_inv_no = '" . mysqli_real_escape_string($conDB, $settlement['request_inv_no']) . "'
                 AND ra.request_type_id = $typeId
                 ORDER BY ra.approval_level ASC, ra.id DESC
@@ -2183,7 +2187,7 @@ function getSettlementDetails($settlementManager) {
             'success' => true,
             'data' => [
                 'settlement' => $settlement,
-                'approval_chain' => $approvalChain,
+                'approval_chain' => approval_steps_api_fields($approvalChain), // + photo / department / short name for the popup stepper
                 'history' => $history,
                 'attachments' => $attachments
             ]

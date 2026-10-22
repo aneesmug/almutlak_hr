@@ -8,6 +8,7 @@
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/approval_steps.php'; // approval chain stepper (shared with the other request reports)
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
@@ -68,7 +69,8 @@ if (mysqli_num_rows($query) == 1) {
                             e.name as approver_name,
                             e.emp_id as approver_emp_id,
                             al.user_type AS approver_role,
-                            d2.dep_nme AS approver_dept_name
+                            d2.dep_nme AS approver_dept_name,
+                            e.avatar AS approver_avatar, e.sex AS approver_sex
                         FROM request_approvers ra 
                         LEFT JOIN employees e ON e.emp_id = ra.approver_id 
                         LEFT JOIN admin_login al ON e.emp_id = al.emp_id
@@ -206,55 +208,7 @@ if (mysqli_num_rows($query) == 1) {
                                     <div class="detail-row"><strong><?= __('current_level') ?>:</strong> <?= (int)$current_pending_level ?></div>
                                 <?php endif; ?>
 
-                                <hr>
-                                <h5 class="mb-3"><?= __('request_chain') ?></h5>
-                                
-                                <?php if (!empty($chain)): ?>
-                                    <div class="approval-timeline">
-                                        <?php foreach ($chain as $step): ?>
-                                            <?php
-                                            $step_status = $step['status'] ?? 'pending';
-                                            $step_class = 'future';
-                                            if ($step_status === 'approved') $step_class = 'approved';
-                                            elseif ($step_status === 'pending') $step_class = 'pending';
-                                            elseif ($step_status === 'rejected') $step_class = 'rejected';
-                                            ?>
-                                            <div class="timeline-item <?= $step_class ?>">
-                                                <div class="icon">
-                                                    <?php if ($step_status === 'approved'): ?>
-                                                        <i class="fa fa-check" style="font-size: 8px;"></i>
-                                                    <?php elseif ($step_status === 'rejected'): ?>
-                                                        <i class="fa fa-times" style="font-size: 8px;"></i>
-                                                    <?php else: ?>
-                                                        <i class="fa fa-clock" style="font-size: 8px;"></i>
-                                                    <?php endif; ?>
-                                                </div>
-                                                <div class="status">
-                                                    <strong><?= htmlspecialchars((string)($step['approver_name'] ?? ('Emp#' . (int)($step['approver_id'] ?? 0)))) ?></strong>
-                                                    <span class="badge badge-<?php
-                                                        if ($step_status === 'approved') echo 'success';
-                                                        elseif ($step_status === 'rejected') echo 'danger';
-                                                        elseif ($step_status === 'pending') echo 'warning';
-                                                        else echo 'secondary';
-                                                    ?>" style="margin-left: 0.5rem;"><?= htmlspecialchars((string)($step['status'] ?? '')) ?></span>
-                                                </div>
-                                                <small class="text-muted" style="display: block; margin-top: 0.2rem;">
-                                                    Level <?= (int)($step['approval_level'] ?? 0) ?>
-                                                    <?php if (!empty($step['action_date'])): ?>
-                                                        • <?= htmlspecialchars((string)$step['action_date']) ?>
-                                                    <?php endif; ?>
-                                                </small>
-                                                <?php if (!empty($step['note'])): ?>
-                                                    <small class="text-muted" style="display: block; margin-top: 0.5rem; font-style: italic;">
-                                                        <?= nl2br(htmlspecialchars((string)$step['note'])) ?>
-                                                    </small>
-                                                <?php endif; ?>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    </div>
-                                <?php else: ?>
-                                    <div class="alert alert-info">No approval chain found for this request.</div>
-                                <?php endif; ?>
+                                <div class="mt-3 mb-3"><?= approval_steps_html(approval_steps_rows($chain, (string)$current_status), (string)$current_status) ?></div>
 
                                 <?php if ($can_take_action): ?>
                                     <hr>

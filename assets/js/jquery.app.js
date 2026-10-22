@@ -154,6 +154,90 @@ loadResource('./assets/js/newEmployeeModal.js?v=20261022', 'js', { defer: true }
 // "Edit Employee" SweetAlert2 modal (uses the newEmp* field helpers above at click time)
 loadResource('./assets/js/editEmployeeModal.js?v=20261022', 'js', { defer: true }, 'head');
 
+// Collapsible stepper header (approvalStepsHtml(..., { collapsed: true })): click / Enter / Space toggles the steps
+document.addEventListener('click', function (e) {
+    const h = e.target.closest && e.target.closest('[data-vr-toggle]');
+    if (h) h.parentNode.classList.toggle('is-collapsed');
+});
+document.addEventListener('keydown', function (e) {
+    const h = e.target.closest && e.target.closest('[data-vr-toggle]');
+    if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); h.parentNode.classList.toggle('is-collapsed'); }
+});
+
+/**
+ * Approval chain stepper for SweetAlert2 report popups - JS twin of includes/approval_steps.php
+ * (styles: assets/css/approval_steps.css, loaded on demand).
+ * rows: [{ level, name, dept, avatar, status, date, note }], requestStatus: the request's own status.
+ * Approved request: only approvers who signed; rejected: approvers who never acted are left out.
+ * opts.collapsed: start closed - the header toggles the steps.
+ */
+function approvalStepsHtml(rows, requestStatus, opts) {
+    opts = opts || {};
+    if (!document.getElementById('approvalStepsCss')) {
+        const l = document.createElement('link');
+        l.id = 'approvalStepsCss'; l.rel = 'stylesheet'; l.href = 'assets/css/approval_steps.css?v=20261022c';
+        document.head.appendChild(l);
+    }
+    const t = (k, d) => { const v = (typeof __ === 'function') ? __(k, d) : d; return (v && v !== k) ? v : d; };
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const meta = (st) => {
+        const s = String(st || '').toLowerCase();
+        if (s.includes('reject') || s.includes('fail')) return ['red', 'mdi-close-circle', t('rejected', 'Rejected')];
+        if (s.includes('cancel') || s.includes('skip')) return ['slate', 'mdi-cancel', t('cancelled', 'Cancelled')];
+        if (s.includes('await') || s.includes('waiting')) return ['sky', 'mdi-timer-sand', t('awaiting', 'Awaiting')];
+        if (s.includes('pending') || s.includes('review')) return ['amber', 'mdi-clock', t('pending', 'Pending')];
+        if (/approv|complet|paid|closed|settled/.test(s)) return ['green', 'mdi-check-circle', t('approved', 'Approved')];
+        return ['slate', 'mdi-circle', s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : '-'];
+    };
+    const fmt = (d) => {
+        if (!d) return '';
+        const x = new Date(String(d).replace(' ', 'T'));
+        if (isNaN(x)) return String(d);
+        const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][x.getMonth()];
+        return String(x.getDate()).padStart(2, '0') + ' ' + m + ' ' + x.getFullYear() + ' · ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0');
+    };
+    const req = String(requestStatus || '').toLowerCase();
+    const reqApproved = ['approved', 'paid', 'completed', 'closed', 'settled'].includes(req);
+    rows = (rows || []).filter(r => {
+        const s = String(r.status || '').toLowerCase();
+        if (reqApproved && s !== 'approved') return false;
+        if (req === 'rejected' && (s === 'pending' || s === 'awaiting')) return false;
+        return true;
+    });
+    let head;
+    if (reqApproved) head = ['green', 'mdi-check-circle', t('request_approved', 'Request Approved')];
+    else if (req === 'rejected') head = ['red', 'mdi-close-circle', t('request_rejected', 'Request Rejected')];
+    else if (req === 'cancelled') head = ['slate', 'mdi-cancel', t('cancelled', 'Cancelled')];
+    else head = ['amber', 'mdi-clock', t('pending_approval', 'Pending Approval')];
+
+    let body;
+    if (rows.length) {
+        body = '<ol class="vr-steps" style="--n: ' + Math.max(3, Math.min(6, rows.length)) + ';">' + rows.map(r => {
+            const [tone, icon, label] = meta(r.status);
+            return '<li class="vr-step vr-tone-' + tone + '">'
+                + '<div class="vr-step-mark"><span class="vr-step-num" title="' + esc(label) + '"><i class="mdi ' + icon + '"></i></span></div>'
+                + '<div class="vr-step-card">'
+                + '<span class="vr-step-level">' + esc(t('level', 'Level')) + ' ' + esc(r.level) + '</span>'
+                + (r.avatar ? '<img class="vr-step-avatar" src="' + esc(r.avatar) + '" alt="">' : '')
+                + '<span class="vr-step-name" title="' + esc(r.name) + '">' + esc(r.name || t('not_assigned', 'Not assigned')) + '</span>'
+                + (r.dept ? '<span class="vr-step-dept">' + esc(r.dept) + '</span>' : '')
+                + '<span class="vr-badge"><i class="mdi ' + icon + '"></i> ' + esc(label) + '</span>'
+                + (r.date ? '<span class="vr-step-date"><i class="mdi mdi-clock-outline"></i>' + esc(fmt(r.date)) + '</span>' : '')
+                + (r.note && String(r.status).toLowerCase() === 'rejected' ? '<div class="vr-step-note"><i class="mdi mdi-comment-text-outline"></i> ' + esc(r.note) + '</div>' : '')
+                + '</div></li>';
+        }).join('') + '</ol>';
+    } else {
+        body = '<div class="vr-flow-notice vr-tone-' + head[0] + '"><i class="mdi ' + head[1] + '"></i><div>' + esc(head[2]) + '</div></div>';
+    }
+    const toggle = opts.collapsed ? ' role="button" tabindex="0" data-vr-toggle="1" title="' + esc(t('view_approval_status', 'View Approval Status')) + '"' : '';
+    return '<div class="vr-flow' + (opts.collapsed ? ' is-collapsible is-collapsed' : '') + '"><div class="vr-flow-head"' + toggle + '>'
+        + '<span class="vr-flow-icon"><i class="mdi mdi-sitemap"></i></span>'
+        + '<div class="vr-flow-title"><b>' + esc(t('approval_chain', 'Approval chain')) + '</b>' + (rows.length ? '<small>' + rows.length + ' ' + esc(t('levels', 'levels')) + '</small>' : '') + '</div>'
+        + '<span class="vr-badge vr-tone-' + head[0] + '"><i class="mdi ' + head[1] + '"></i> ' + esc(head[2]) + '</span>'
+        + (opts.collapsed ? '<i class="mdi mdi-chevron-down vr-flow-chevron"></i>' : '')
+        + '</div><div class="vr-flow-body">' + body + '</div></div>';
+}
+
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.
     if (typeof window.lang === 'undefined' || window.lang === null) {
@@ -9393,11 +9477,11 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                 const empId = s.emp_id;
 
                 if (requestType.includes('vacation')) {
-                    actionsHtml += '<a href="./vacation_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_vacation_report') + '</a>';
+                    actionsHtml += '<a href="./request_report.php?type=vacation&id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_vacation_report') + '</a>';
                 } else if (requestType.includes('loan')) {
-                    actionsHtml += '<a href="./loan_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_loan_report') + '</a>';
+                    actionsHtml += '<a href="./request_report.php?type=loan&id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_loan_report') + '</a>';
                 } else if (requestType.includes('business_trip')) {
-                    actionsHtml += '<a href="./business_trip_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + (__('business_trip_report') || 'Business Trip Report') + '</a>';
+                    actionsHtml += '<a href="./request_report.php?type=business_trip&id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + (__('business_trip_report') || 'Business Trip Report') + '</a>';
                 } else if (requestType.includes('resignation')) {
                     actionsHtml += '<a href="./eos_pdf.php?emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_end_of_service_report') + '</a>';
                 } else {
@@ -9441,21 +9525,15 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                     rejected: { icon: 'fa-times', cls: 'et-step-danger', label: __('rejected') },
                     awaiting: { icon: 'fa-hourglass-half', cls: 'et-step-secondary', label: __('awaiting') }
                 };
-                let timelineHtml = '';
-                (response.data.approval_chain || []).forEach(level => {
-                    const step = stepMeta[level.status] || stepMeta.awaiting;
-                    timelineHtml += `
-                        <div class="et-timeline-item ${step.cls}">
-                            <div class="et-timeline-dot"><i class="fa ${step.icon}"></i></div>
-                            <div class="et-timeline-content">
-                                <div class="et-timeline-top">
-                                    <span class="et-timeline-level">${__('level')} ${level.approval_level}</span>
-                                    <span class="et-timeline-badge">${step.label}</span>
-                                </div>
-                                <div class="et-timeline-approver">${level.approver_name || __('not_assigned')}</div>
-                            </div>
-                        </div>`;
-                });
+                const chainRows = (response.data.approval_chain || []).map(level => ({
+                    level: level.approval_level,
+                    name: level.approver_short_name || level.approver_name || '',
+                    dept: level.approver_dept || '',
+                    avatar: level.approver_avatar || '',
+                    status: level.status,
+                    date: level.action_date,
+                    note: level.note
+                }));
 
                 // --- Status pill for the header ---
                 const statusMeta = {
@@ -9494,15 +9572,8 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                         ${infoRow('fa-credit-card', __('settlement_method'), s.settlement_method || __('not_available'))}
                         ${infoRow('fa-calendar-alt', __('created'), createdText)}
                     </div>`;
-                if (timelineHtml) {
-                    html += `
-                        <div class="vacation-card">
-                            <div class="vacation-card-header et-timeline-toggle" onclick="toggleEtApprovalChain(this)" role="button">
-                                <i class="fa fa-sitemap"></i> ${__('approval_chain')}
-                                <i class="fa fa-chevron-down et-timeline-chevron"></i>
-                            </div>
-                            <div class="et-timeline d-none">${timelineHtml}</div>
-                        </div>`;
+                if (chainRows.length) {
+                    html += approvalStepsHtml(chainRows, s.settlement_status, { collapsed: true });
                 }
                 if (actionsHtml) {
                     html += `

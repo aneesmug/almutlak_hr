@@ -170,6 +170,8 @@ if ($typeStmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE typ
 
 $stmt = $conDB->prepare("SELECT ra.approval_level, ra.status, ra.action_date,
                                 COALESCE(e.name, al.fullname, al.username) AS approver_name,
+                                e.avatar AS approver_avatar, e.sex AS approver_sex,
+                                (SELECT dep_nme FROM department WHERE id = e.dept) AS approver_dept_name,
                                 al.user_type
                          FROM request_approvers ra
                          LEFT JOIN employees e ON ra.approver_id = e.emp_id
@@ -323,16 +325,11 @@ if (!empty($vacation['attachment_path'])) {
 
 // ---- Approval chain (rejected request: hide approvers that never acted) ----
 $is_vacation_rejected = ($vacation['current_status'] ?? '') === 'rejected';
-$chain_rows = [];
-foreach ($chain as $link) {
-    if ($is_vacation_rejected && in_array($link['status'], ['pending', 'awaiting'], true)) continue;
-    $chain_rows[] = ['level' => $link['approval_level'], 'name' => getDisplayName(parseName($link['approver_name']) ?? 'N/A'), 'role' => getRoleLabel($link['user_type']), 'status' => $link['status'], 'date' => $link['action_date'], 'note' => ''];
-}
 $history_rows = array_map(function ($e) {
     return ['status' => $e['status'] ?? '', 'by' => getDisplayName($e['emp_name'] ?? ''), 'date' => $e['created_at'] ?? null, 'note' => getDisplayName($e['note'] ?? '')];
 }, $history);
 
-$report_btn = '<a href="vacation_report_details.php?id=' . (int)$vacation['id'] . '&emp_id=' . urlencode($vacation['emp_id']) . '" target="_blank" class="sr-btn"><i class="mdi mdi-file-pdf"></i> ' . sr_h(__('view_report')) . '</a>';
+$report_btn = '<a href="request_report.php?type=vacation&id=' . (int)$vacation['id'] . '&emp_id=' . urlencode($vacation['emp_id']) . '" target="_blank" class="sr-btn"><i class="mdi mdi-file-pdf"></i> ' . sr_h(__('view_report')) . '</a>';
 
 srh_page_open(__('vacation_approval_history'));
 echo srh_header(__('vacation_approval_history'), __('complete_approval_timeline'), 'all_applied_vac.php', $report_btn);
@@ -344,10 +341,10 @@ echo srh_hero(getDisplayName($vacation['employee_name']), $avatar_path, [
 ], srh_status_pill($vacation['current_status']));
 
 echo srh_tiles([
-    [__('type'), sr_h(getDisplayName($vacation['vac_type'])), 'indigo', sr_h($fly_type_display)],
-    [__('start_date'), sr_h(!empty($vacation['start_date']) ? format_safe_date($vacation['start_date'], 'd M Y') : '-'), '', ''],
-    [__('return_date'), sr_h(!empty($vacation['return_date']) ? format_safe_date($vacation['return_date'], 'd M Y') : '-'), '', ''],
-    [__('total_days'), (int)$vacation['vacdays'] . ' ' . sr_h(__('days')), 'green', ''],
+    [__('type'), sr_h(getDisplayName($vacation['vac_type'])), 'indigo', sr_h($fly_type_display), 'mdi-beach'],
+    [__('start_date'), sr_h(!empty($vacation['start_date']) ? format_safe_date($vacation['start_date'], 'd M Y') : '-'), '', '', 'mdi-calendar-today'],
+    [__('return_date'), sr_h(!empty($vacation['return_date']) ? format_safe_date($vacation['return_date'], 'd M Y') : '-'), '', '', 'mdi-calendar-range'],
+    [__('total_days'), (int)$vacation['vacdays'] . ' ' . sr_h(__('days')), 'green', '', 'mdi-calendar-clock'],
 ]);
 ?>
 <div class="srh-grid">
@@ -379,7 +376,7 @@ echo srh_tiles([
         <?php if ($has_payment_info): ?>
             <?= srh_card('mdi-cash-multiple', __('payment_information'), $payment_rows ? srh_kv($payment_rows) : sr_empty_state(__('no_data_found', 'No data found'))) ?>
         <?php endif; ?>
-        <?= srh_card('mdi-sitemap', __('approval_chain'), srh_chain($chain_rows), count($chain_rows) . ' ' . sr_h(__('levels', 'levels'))) ?>
+        <?= srh_approval_chain($chain, $vacation['current_status']) ?>
     </div>
 </div>
 <?= srh_card('mdi-history', __('status_history_timeline'), srh_timeline($history_rows)) ?>

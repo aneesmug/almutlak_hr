@@ -133,6 +133,8 @@ if ($typeStmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE typ
 if ($request_type_id > 0) {
     $stmt = $conDB->prepare("SELECT ra.approval_level, ra.status, ra.action_date,
                                     COALESCE(e.name, al.fullname, al.username) AS approver_name,
+                                    e.avatar AS approver_avatar, e.sex AS approver_sex,
+                                    (SELECT dep_nme FROM department WHERE id = e.dept) AS approver_dept_name,
                                     al.user_type, ra.note
                              FROM request_approvers ra
                              LEFT JOIN employees e ON ra.approver_id = e.emp_id
@@ -167,9 +169,6 @@ $salary_html = $salary_info
     ? srh_kv($salary_rows) . '<div class="srh-total"><span>' . sr_h(__('total_salary', 'Total salary')) . '</span>' . srh_money($salary_info['total_salary']) . '</div>'
     : sr_empty_state(__('no_data_found', 'No data found'));
 
-$chain_rows = array_map(function ($c) {
-    return ['level' => $c['approval_level'], 'name' => getDisplayName($c['approver_name']), 'role' => $c['user_type'] ?? '', 'status' => $c['status'] ?? 'awaiting', 'date' => $c['action_date'], 'note' => $c['note'] ?? ''];
-}, $chain);
 $history_rows = array_map(function ($e) {
     return ['status' => $e['status'] ?? '', 'by' => getDisplayName($e['emp_name'] ?? ''), 'date' => $e['created_at'] ?? null, 'note' => $e['note'] ?? ''];
 }, $history);
@@ -184,10 +183,10 @@ echo srh_hero(getDisplayName($req['employee_name']), $avatar_path, [
 ], srh_status_pill($req['current_status']));
 
 echo srh_tiles([
-    [__('increment_amount', 'Increment Amount'), srh_money($req['increment_amount']), '', sr_h(__('requested_by_supervisor', 'Requested by supervisor'))],
-    [__('approved_amount', 'Approved Amount'), $req['approved_amount'] !== null ? srh_money($req['approved_amount']) : '-', $req['approved_amount'] !== null ? 'green' : '', $gm_name !== '' ? 'GM: ' . sr_h(getDisplayName($gm_name)) : ''],
-    [__('increment_effective_date', 'Increment Effective Date'), sr_h(!empty($req['last_increment_date']) ? format_safe_date($req['last_increment_date'], 'd M Y') : '-'), 'indigo', ''],
-    [__('evaluation_score', 'Evaluation Score'), $req['evaluation_score'] !== null ? number_format((float)$req['evaluation_score'], 2) : '-', '', ''],
+    [__('increment_amount', 'Increment Amount'), srh_money($req['increment_amount']), '', sr_h(__('requested_by_supervisor', 'Requested by supervisor')), 'mdi-trending-up'],
+    [__('approved_amount', 'Approved Amount'), $req['approved_amount'] !== null ? srh_money($req['approved_amount']) : '-', $req['approved_amount'] !== null ? 'green' : '', $gm_name !== '' ? 'GM: ' . sr_h(getDisplayName($gm_name)) : '', 'mdi-check-circle'],
+    [__('increment_effective_date', 'Increment Effective Date'), sr_h(!empty($req['last_increment_date']) ? format_safe_date($req['last_increment_date'], 'd M Y') : '-'), 'indigo', '', 'mdi-calendar-check'],
+    [__('evaluation_score', 'Evaluation Score'), $req['evaluation_score'] !== null ? number_format((float)$req['evaluation_score'], 2) : '-', '', '', 'mdi-star-circle'],
 ]);
 ?>
 <div class="srh-grid">
@@ -203,7 +202,7 @@ echo srh_tiles([
     </div>
     <div>
         <?= srh_card('mdi-cash-multiple', __('salary_information', 'Salary Information'), $salary_html) ?>
-        <?= srh_card('mdi-sitemap', __('approval_chain'), srh_chain($chain_rows), count($chain_rows) . ' ' . sr_h(__('levels', 'levels'))) ?>
+        <?= srh_approval_chain($chain, $req['current_status']) ?>
     </div>
 </div>
 <?= srh_card('mdi-history', __('status_history_timeline'), srh_timeline($history_rows)) ?>

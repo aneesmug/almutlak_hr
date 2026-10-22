@@ -10,6 +10,7 @@
 
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
+require_once __DIR__ . '/includes/approval_steps.php'; // approval chain stepper (shared with vacation_report_details.php)
 
 // Ensure UTF-8 encoding for database connection
 mysqli_set_charset($conDB, "utf8mb4");
@@ -118,7 +119,8 @@ if (mysqli_num_rows($query) == 1) {
         $chain_sql = "SELECT ra.*,
                       COALESCE(e.name, al.fullname, al.username) as approver_name,
                       al.user_type as approver_role,
-                      d2.dep_nme AS approver_dept_name
+                      d2.dep_nme AS approver_dept_name,
+                      e.avatar AS approver_avatar, e.sex AS approver_sex
                       FROM request_approvers ra
                       LEFT JOIN employees e ON ra.approver_id = e.emp_id
                       LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
@@ -520,49 +522,8 @@ if (mysqli_num_rows($query) == 1) {
                                             </div>
 
                                             <div class="row" id="approvalStatusContainer" style="display: none;">
-                                                <div class="col-md-12">
-                                                    <div class="report-section">
-                                                        <h5 class="section-title"><i class="fa fa-tasks"></i> <?= __('approval_status') ?></h5>
-                                                        <div class="approval-flat-list">
-                                                    <?php if (empty($approval_chain)): ?>
-                                                        <div class="alert alert-info"><?= __('add') ?></div>
-                                                    <?php else:
-                                                        // Check if request was rejected
-                                                        $is_loan_rejected = isset($loan_details['status']) && $loan_details['status'] === 'rejected';
-                                                    ?>
-                                                        <?php foreach ($approval_chain as $level):
-                                                            // If request is rejected, skip pending/awaiting approvers
-                                                            if ($is_loan_rejected && in_array($level['status'], ['pending', 'awaiting'])) {
-                                                                continue;
-                                                            }
-
-                                                            $level_status = $level['status'] ?? 'pending';
-                                                            $status_color = 'text-muted';
-                                                            if ($level_status === 'approved') $status_color = 'text-success';
-                                                            elseif ($level_status === 'rejected') $status_color = 'text-danger';
-                                                            elseif ($level_status === 'pending') $status_color = 'text-warning';
-
-                                                            $role_icon = 'fa-user';
-                                                            if (!empty($level['approver_role']) && stripos($level['approver_role'], 'hr') !== false) {
-                                                                $role_icon = 'fa-user-shield';
-                                                            } elseif (!empty($level['approver_role']) && (stripos($level['approver_role'], 'manager') !== false || stripos($level['approver_role'], 'administrator') !== false || stripos($level['approver_role'], 'gm') !== false)) {
-                                                                $role_icon = 'fa-user-tie';
-                                                            }
-
-                                                            $level_scope = !empty($level['approver_dept_name']) ? getDisplayName($level['approver_dept_name']) : ucwords(str_replace('_', ' ', (string)($level['approver_role'] ?? '')));
-                                                        ?>
-                                                        <div class="approval-flat-item">
-                                                            <i class="fa <?= $role_icon ?> <?= $status_color ?>"></i>
-                                                            <strong><?= getDisplayName($level['approver_name'] ?? 'Pending Assignment'); ?></strong>
-                                                            <small class="text-muted">(<?= __('level') ?> <?= (int)$level['approval_level'] ?><?= $level_scope !== '' ? ': ' . htmlspecialchars((string)$level_scope) : '' ?>)</small>
-                                                            <?php if ($level_status === 'rejected' && !empty($level['note'])): ?>
-                                                                <div class="approval-flat-note"><?= getDisplayName($level['note']); ?></div>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                        <?php endforeach; ?>
-                                                    <?php endif; ?>
-                                                        </div>
-                                                    </div>
+                                                <div class="col-12 mb-3">
+                                                    <?= approval_steps_html(approval_steps_rows($approval_chain, (string)($loan_details['status'] ?? '')), (string)($loan_details['status'] ?? '')) ?>
                                                 </div>
                                             </div>
 

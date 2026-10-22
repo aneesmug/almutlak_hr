@@ -2491,7 +2491,7 @@ if (mysqli_num_rows($query) == 1) {
 																<td>-</td>
 																<td><span class="badge badge-info"><?= ucfirst(__($topup_rec['loan_type'])); ?></span></td>
 																<td><span class="badge badge-primary"><i class="fa fa-arrow-up"></i> <?= __('manual_top_up', 'Manual Top-up') ?></span></td>
-																<td><a href="./loan_report_details.php?id=<?= $topup_rec['loan_id'] ?>&emp_id=<?= $emprow['emp_id'] ?>" target="_blank" class="btn btn-sm btn-dark"><i class="fa fa-eye"></i> <?= __('view') ?></a></td>
+																<td><a href="./request_report.php?type=loan&id=<?= $topup_rec['loan_id'] ?>&emp_id=<?= $emprow['emp_id'] ?>" target="_blank" class="btn btn-sm btn-dark"><i class="fa fa-eye"></i> <?= __('view') ?></a></td>
 															</tr>
 														<?php
 															continue;
@@ -2529,7 +2529,7 @@ if (mysqli_num_rows($query) == 1) {
 															</td>
 															<td><span class="badge badge-<?= ($loan_rec['loan_type'] == 'emergency' ? 'warning' : 'info') ?>"><?= ucfirst(__($loan_rec['loan_type'])); ?></span></td>
 															<td><span class="badge badge-<?= ($loan_rec['status'] == 'approved' ? 'success' : ($loan_rec['status'] == 'paid' ? 'primary' : ($loan_rec['status'] == 'rejected' ? 'danger' : 'warning'))) ?>"><?= ucfirst(__($loan_rec['status'])); ?></span></td>
-															<td><a href="./loan_report_details.php?id=<?= $loan_id_hist ?>&emp_id=<?= $emprow['emp_id'] ?>" target="_blank" class="btn btn-sm btn-dark"><i class="fa fa-eye"></i> <?= __('view') ?></a></td>
+															<td><a href="./request_report.php?type=loan&id=<?= $loan_id_hist ?>&emp_id=<?= $emprow['emp_id'] ?>" target="_blank" class="btn btn-sm btn-dark"><i class="fa fa-eye"></i> <?= __('view') ?></a></td>
 														</tr>
 													<?php } ?>
 												</tbody>

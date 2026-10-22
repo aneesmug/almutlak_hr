@@ -1,0 +1,50 @@
+/* Approval chain stepper - one small card per approval level.
+   PHP: includes/approval_steps.php (report pages). JS: approvalStepsHtml() in assets/js/jquery.app.js (SweetAlert2 report popups). */
+.vr-flow { border: 1px solid #e8ebf1; border-radius: 16px; background: #fff; overflow: hidden; }
+.vr-flow-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 18px; background: linear-gradient(180deg, #f8fafc, #fff); border-bottom: 1px solid #eef1f5; }
+.vr-flow-icon { width: 38px; height: 38px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 4px 10px rgba(99,102,241,.25); }
+.vr-flow-title { flex: 1; min-width: 0; }
+.vr-flow-title b { display: block; font-size: 15px; font-weight: 800; color: #0f172a; }
+.vr-flow-title small { font-size: 12px; color: #64748b; }
+.vr-flow-body { padding: 14px 16px 16px; }
+.vr-tone-green { --t: #16a34a; --tb: #f0fdf4; } .vr-tone-red { --t: #dc2626; --tb: #fef2f2; } .vr-tone-amber { --t: #d97706; --tb: #fffbeb; }
+.vr-tone-sky { --t: #0284c7; --tb: #f0f9ff; } .vr-tone-slate { --t: #64748b; --tb: #f8fafc; } .vr-tone-indigo { --t: #4f46e5; --tb: #eef2ff; }
+.vr-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; color: var(--t); background: var(--tb); border: 1px solid color-mix(in srgb, var(--t) 30%, white); }
+.vr-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 10px; }
+.vr-step { position: relative; display: flex; flex-direction: column; align-items: center; }
+.vr-step-mark { position: relative; width: 100%; display: flex; justify-content: center; margin-bottom: 8px; }
+.vr-step-mark::before { content: ""; position: absolute; top: 50%; inset-inline-start: calc(50% + 18px); width: calc(100% - 26px); height: 3px; border-radius: 3px; background: var(--t); opacity: .35; }
+.vr-step:last-child .vr-step-mark::before { display: none; }
+.vr-step-num { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; background: var(--t); box-shadow: 0 0 0 4px var(--tb); }
+.vr-step-card { width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 10px 8px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--t) 22%, white); background: linear-gradient(180deg, var(--tb), #fff 70%); }
+.vr-step-level { font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--t); }
+.vr-step-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid #fff; box-shadow: 0 0 0 2px var(--t); background: #fff; }
+.vr-step-name { max-width: 100%; font-size: 12.5px; font-weight: 800; color: #0f172a; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.vr-step-dept { max-width: 100%; font-size: 11px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vr-step-card .vr-badge { padding: 2px 9px; font-size: 11px; gap: 4px; }
+.vr-step-date { font-size: 10.5px; color: #64748b; white-space: nowrap; }
+.vr-step-date i { margin-inline-end: 4px; opacity: .8; }
+.vr-step-note { width: 100%; margin-top: 2px; padding: 5px 7px; border-radius: 8px; font-size: 11px; color: #b91c1c; background: #fef2f2; text-align: start; }
+.vr-flow-notice { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; color: var(--t); background: var(--tb); border: 1px solid color-mix(in srgb, var(--t) 25%, white); font-weight: 600; }
+.vr-flow-notice i { font-size: 20px; }
+.vr-flow-notice small { display: block; font-weight: 500; color: #64748b; }
+@media screen and (max-width: 991px) { .vr-steps { grid-template-columns: repeat(min(var(--n, 3), 3), minmax(0, 1fr)); row-gap: 14px; } .vr-step:nth-child(3n) .vr-step-mark::before { display: none; } }
+@media screen and (max-width: 767px) {
+    .vr-steps { grid-template-columns: 1fr; }
+    .vr-step .vr-step-mark::before { display: block; } .vr-step:last-child .vr-step-mark::before { display: none; }
+    .vr-step { flex-direction: row; align-items: stretch; gap: 12px; }
+    .vr-step-mark { width: auto; flex-direction: column; justify-content: flex-start; margin: 0; }
+    .vr-step-mark::before { top: 40px; bottom: -14px; inset-inline-start: 50%; width: 3px; height: auto; transform: translateX(-50%); }
+    .vr-step-card { align-items: flex-start; text-align: start; }
+}
+@media print { .vr-flow { break-inside: avoid; } .vr-step-card, .vr-step-num, .vr-badge, .vr-flow-head { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+/* inside SweetAlert2 popups */
+.swal2-popup .vr-flow { text-align: start; margin-top: 4px; }
+/* collapsible (JS popups: approvalStepsHtml(..., { collapsed: true })) - header toggles the steps */
+.vr-flow.is-collapsible .vr-flow-head { cursor: pointer; user-select: none; }
+.vr-flow.is-collapsible .vr-flow-head:hover { background: linear-gradient(180deg, #eef2ff, #fff); }
+.vr-flow-chevron { font-size: 20px; color: #64748b; transition: transform .2s; }
+.vr-flow.is-collapsed .vr-flow-chevron { transform: rotate(-90deg); }
+[dir="rtl"] .vr-flow.is-collapsed .vr-flow-chevron { transform: rotate(90deg); }
+.vr-flow.is-collapsed .vr-flow-head { border-bottom: 0; }
+.vr-flow.is-collapsed .vr-flow-body { display: none; }

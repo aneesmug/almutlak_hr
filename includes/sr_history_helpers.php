@@ -83,17 +83,19 @@ if (!function_exists('srh_header')) {
     }
 }
 
-/* Employee / request banner. $meta: [[label, value], ...] shown as chips. */
+/* Employee / request banner. $meta: [[label, value, mdi icon], ...] shown as chips, each chip in its own tone. */
 if (!function_exists('srh_hero')) {
     function srh_hero($name, $avatar_url, array $meta = [], $right_html = '')
     {
         $avatar = $avatar_url
             ? '<img class="srh-hero-avatar" src="' . sr_h($avatar_url) . '" alt="" onerror="this.outerHTML=\'<span class=&quot;sr-avatar srh-hero-avatar&quot;>' . sr_h(sr_initials($name)) . '</span>\'">'
             : '<span class="sr-avatar srh-hero-avatar">' . sr_h(sr_initials($name)) . '</span>';
+        $tones = ['blue', 'violet', 'teal', 'amber', 'rose'];
         $chips = '';
+        $i = 0;
         foreach ($meta as $m) {
             if (!isset($m[1]) || $m[1] === '' || $m[1] === null) continue;
-            $chips .= '<span class="srh-hero-chip">' . (isset($m[2]) ? '<i class="mdi ' . sr_h($m[2]) . '"></i>' : '') . '<small>' . sr_h($m[0]) . '</small> ' . sr_h($m[1]) . '</span>';
+            $chips .= '<span class="srh-hero-chip is-' . $tones[$i++ % count($tones)] . '">' . (isset($m[2]) ? '<i class="mdi ' . sr_h($m[2]) . '"></i>' : '') . '<small>' . sr_h($m[0]) . '</small> ' . sr_h($m[1]) . '</span>';
         }
         return '<div class="srh-hero">' . $avatar
             . '<div class="srh-hero-body"><div class="srh-hero-name">' . sr_h($name) . '</div><div class="srh-hero-meta">' . $chips . '</div></div>'
@@ -115,48 +117,55 @@ if (!function_exists('srh_kv')) {
     }
 }
 
-/* Card with header. */
+/* Card with header. The header icon sits in a coloured chip; each card on the page takes the next tone. */
 if (!function_exists('srh_card')) {
     function srh_card($icon, $title, $body_html, $aside = '', $body_class = 'sr-card-body')
     {
-        return '<div class="sr-card srh-card"><div class="sr-card-head"><h2 class="sr-card-title"><i class="mdi ' . sr_h($icon) . '"></i> ' . sr_h($title) . '</h2>'
+        static $n = 0;
+        $tones = ['indigo', 'teal', 'violet', 'amber', 'sky', 'rose'];
+        return '<div class="sr-card srh-card is-' . $tones[$n++ % count($tones)] . '"><div class="sr-card-head"><h2 class="sr-card-title"><span class="srh-card-icon"><i class="mdi ' . sr_h($icon) . '"></i></span> ' . sr_h($title) . '</h2>'
             . ($aside !== '' ? '<span class="sr-card-sub">' . $aside . '</span>' : '') . '</div>'
             . '<div class="' . sr_h($body_class) . '">' . $body_html . '</div></div>';
     }
 }
 
-/* Highlight tiles. $tiles: [[label, value_html, tone('green'|'indigo'|''), sub_html], ...] */
+/* Highlight tiles - dashboard KPI look: separate cards with a coloured accent bar and icon chip; the number rolls up
+   (assets/js/sr_count_up.js: .srh-tile-value) and the cards rise in one after another.
+   $tiles: [[label, value_html, tone('green'|'indigo'|'amber'|'red'|''), sub_html, mdi icon], ...]
+   An empty tone takes the next colour of the palette; a missing icon falls back per position. */
 if (!function_exists('srh_tiles')) {
     function srh_tiles(array $tiles)
     {
+        $palette = ['blue', 'violet', 'sky', 'teal'];
+        $icons = ['mdi-chart-bar', 'mdi-calendar', 'mdi-calendar-check', 'mdi-counter'];
         $html = '<div class="srh-tiles" style="--srh-cols: ' . max(1, min(4, count($tiles))) . ';">';
-        foreach ($tiles as $t) {
-            $html .= '<div class="srh-tile' . (!empty($t[2]) ? ' tone-' . sr_h($t[2]) : '') . '"><span>' . sr_h($t[0]) . '</span><b>' . $t[1] . '</b>'
+        foreach (array_values($tiles) as $i => $t) {
+            $tone = !empty($t[2]) ? $t[2] : $palette[$i % count($palette)];
+            $icon = !empty($t[4]) ? $t[4] : $icons[$i % count($icons)];
+            $html .= '<div class="srh-tile is-' . sr_h($tone) . '"><div class="srh-tile-top"><span class="srh-tile-label">' . sr_h($t[0]) . '</span>'
+                . '<span class="srh-tile-icon"><i class="mdi ' . sr_h($icon) . '"></i></span></div>'
+                . '<b class="srh-tile-value">' . $t[1] . '</b>'
                 . (!empty($t[3]) ? '<small>' . $t[3] . '</small>' : '') . '</div>';
         }
         return $html . '</div>';
     }
 }
 
-/* Approval chain. $rows: [['level'=>, 'name'=>, 'role'=>, 'status'=>, 'date'=>, 'note'=>], ...] */
-if (!function_exists('srh_chain')) {
-    function srh_chain(array $rows)
+/* Approval chain - the shared stepper card (includes/approval_steps.php, same design as the reports and popups).
+   $chain: request_approvers rows (approval_level, status, action_date, note, approver_name, plus optional
+   approver_dept_name / approver_avatar / approver_sex; approver_role or user_type for the role fallback).
+   $requestStatus: the request's own status (approved request shows approved steps only, rejected hides pending ones). */
+if (!function_exists('srh_approval_chain')) {
+    function srh_approval_chain(array $chain, $requestStatus)
     {
-        if (empty($rows)) return sr_empty_state(__('no_approvers', 'No approvers'));
-        $html = '<ul class="sr-activity srh-steps">';
-        foreach ($rows as $r) {
-            [$tone, $icon, $label] = srh_status($r['status'] ?? '');
-            $role = trim((string)($r['role'] ?? ''));
-            $html .= '<li><span class="sr-activity-icon tone-' . $tone . '"><i class="mdi ' . $icon . '"></i></span><div class="sr-activity-body">'
-                . '<div class="sr-activity-title">' . sr_h($r['name'] ?? '-')
-                . ($role !== '' ? ' <span class="sr-chip">' . sr_h(srh_role_label($role)) . '</span>' : '')
-                . ' ' . sr_pill($tone, function_exists('getDisplayName') ? getDisplayName($label) : $label, true) . '</div>'
-                . (!empty($r['note']) ? '<div class="sr-activity-note"><i class="mdi mdi-comment-text-outline"></i> ' . nl2br(sr_h($r['note'])) . '</div>' : '')
-                . '<div class="sr-activity-meta"><span>' . sr_h(__('level', 'Level')) . ' ' . sr_h($r['level'] ?? '-') . '</span>'
-                . (!empty($r['date']) ? '<span><i class="mdi mdi-clock"></i> ' . sr_h(format_safe_date($r['date'], 'd M Y H:i')) . '</span>' : '')
-                . '</div></div></li>';
+        require_once __DIR__ . '/approval_steps.php';
+        foreach ($chain as &$row) {
+            $row['approver_role'] = $row['approver_role'] ?? ($row['user_type'] ?? '');
         }
-        return $html . '</ul>';
+        unset($row);
+        $rows = approval_steps_rows($chain, (string)$requestStatus);
+        if (empty($rows)) return srh_card('mdi-sitemap', __('approval_chain'), sr_empty_state(__('no_approvers', 'No approvers')));
+        return approval_steps_html($rows, (string)$requestStatus);
     }
 }
 

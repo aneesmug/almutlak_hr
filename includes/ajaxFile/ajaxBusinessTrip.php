@@ -710,7 +710,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'cancelBusinessTripAdmin
                 $trip_row['emp_id'],
                 'Business Trip Request Cancelled',
                 'Your business trip request ' . htmlspecialchars($trip_id) . ' was cancelled by an administrator.' . ($cancellation_note !== '' ? ' Reason: ' . $cancellation_note : ''),
-                'business_trip_status_history.php?inv_no=' . urlencode($trip_id)
+                'business_trip_status_history.php?request_inv_no=' . urlencode($trip_id)
             );
         }
 

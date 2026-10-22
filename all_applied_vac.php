@@ -872,7 +872,7 @@ if ($can_see_all_depts) {
 
                                             $is_fly_annual = ($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual');
                                             $display_name = getDisplayName($req['employee_name']);
-                                            $report_url = 'vacation_report_details.php?id=' . (int)$req['id'] . '&emp_id=' . urlencode($req['emp_id']);
+                                            $report_url = 'request_report.php?type=vacation&id=' . (int)$req['id'] . '&emp_id=' . urlencode($req['emp_id']);
                                             ?>
                                             <tr>
                                                 <td>

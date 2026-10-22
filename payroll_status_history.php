@@ -154,6 +154,8 @@ $chainStmt = $conDB->prepare("SELECT
         ra.action_date,
         ra.note,
         COALESCE(e.name, al.fullname, al.username) AS approver_name,
+        e.avatar AS approver_avatar, e.sex AS approver_sex,
+        (SELECT dep_nme FROM department WHERE id = e.dept) AS approver_dept_name,
         COALESCE(al.user_type, '') AS user_type
     FROM request_approvers ra
     INNER JOIN (
@@ -259,17 +261,13 @@ $na = __('not_available', 'N/A');
 $fmt = function ($v) use ($na) { return !empty($v) ? format_safe_date($v, 'd M Y, H:i') : $na; };
 
 // Approval chain - hr_payroll accounts show as "HR Payroll" instead of their name.
-$chain_rows = array_map(function ($link) {
-    $isHrPayroll = strtolower(trim((string)($link['user_type'] ?? ''))) === 'hr_payroll';
-    return [
-        'level' => (int)($link['approval_level'] ?? 0),
-        'name' => $isHrPayroll ? __('hr_payroll', 'HR Payroll') : getDisplayName(parseName($link['approver_name']) ?? ($link['approver_name'] ?? __('not_available', 'N/A'))),
-        'role' => $isHrPayroll ? '' : ($link['user_type'] ?? ''),
-        'status' => strtolower((string)($link['status'] ?? 'pending')),
-        'date' => $link['action_date'] ?? null,
-        'note' => !empty($link['note']) ? getDisplayName($link['note']) : '',
-    ];
-}, $chain);
+foreach ($chain as &$link) {
+    if (strtolower(trim((string)($link['user_type'] ?? ''))) === 'hr_payroll') {
+        $link['approver_name'] = __('hr_payroll', 'HR Payroll');
+        $link['approver_dept_name'] = '';
+    }
+}
+unset($link);
 $history_rows = array_map(function ($item) {
     return [
         'status' => strtolower((string)($item['status'] ?? 'pending_approval')),
@@ -311,10 +309,10 @@ echo srh_hero(payrollStatusHistoryDisplayName($payrollRequest['requester_name'] 
 ], srh_status_pill($status));
 
 echo srh_tiles([
-    [__('payroll_month'), sr_h($payrollRequest['payroll_month'] ?? $na), 'indigo', ''],
-    [__('employees', 'Employees'), (int)($payrollRequest['employee_count'] ?? 0), '', ''],
-    [__('total_net', 'Total Net'), srh_money($payrollRequest['total_net_salary'] ?? 0), 'green', ''],
-    [__('paid', 'Paid'), (int)($payrollRequest['paid_count'] ?? 0), '', sr_h(__('generated', 'Generated')) . ': ' . (int)($payrollRequest['generated_count'] ?? 0)],
+    [__('payroll_month'), sr_h($payrollRequest['payroll_month'] ?? $na), 'indigo', '', 'mdi-calendar-text'],
+    [__('employees', 'Employees'), (int)($payrollRequest['employee_count'] ?? 0), '', '', 'mdi-account-multiple'],
+    [__('total_net', 'Total Net'), srh_money($payrollRequest['total_net_salary'] ?? 0), 'green', '', 'mdi-cash-multiple'],
+    [__('paid', 'Paid'), (int)($payrollRequest['paid_count'] ?? 0), '', sr_h(__('generated', 'Generated')) . ': ' . (int)($payrollRequest['generated_count'] ?? 0), 'mdi-check-all'],
 ]);
 ?>
 <div class="srh-grid">
@@ -337,7 +335,7 @@ echo srh_tiles([
         ])) ?>
     </div>
     <div>
-        <?= srh_card('mdi-sitemap', __('approval_chain', 'Approval Chain'), srh_chain($chain_rows), count($chain_rows) . ' ' . sr_h(__('levels', 'levels'))) ?>
+        <?= srh_approval_chain($chain, $status) ?>
     </div>
 </div>
 <?php if ($finance_html !== ''): ?>

@@ -11,6 +11,7 @@
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/approval_steps.php'; // approval chain stepper (shared with the other request reports)
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
@@ -107,7 +108,8 @@ if (mysqli_num_rows($query) == 1) {
                            e.name AS approver_name, 
                            e.emp_id AS approver_emp_id,
                            al.user_type AS approver_role,
-                           d2.dep_nme AS approver_dept_name
+                           d2.dep_nme AS approver_dept_name,
+                           e.avatar AS approver_avatar, e.sex AS approver_sex
                        FROM request_approvers ra
                        LEFT JOIN employees e ON ra.approver_id = e.emp_id
                        LEFT JOIN admin_login al ON e.emp_id = al.emp_id
@@ -404,66 +406,9 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <?php endif; ?>
 
-                                <!-- Approval Timeline -->
-                                <?php if (!empty($approval_chain)): ?>
-                                <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-history"></i> <?= __('approval_timeline') ?></h5>
-                                    <div class="approval-timeline">
-                                        <?php 
-                                            // Check if request was rejected
-                                            $is_resignation_rejected = isset($resignation_details['status']) && $resignation_details['status'] === 'rejected';
-                                        ?>
-                                        <?php foreach ($approval_chain as $approval): 
-                                            // If request is rejected, skip pending/awaiting approvers
-                                            if ($is_resignation_rejected && in_array($approval['status'], ['pending', 'awaiting'])) {
-                                                continue;
-                                            }
-                                            
-                                            $is_approved = $approval['status'] === 'approved';
-                                            $is_pending = $approval['status'] === 'awaiting';
-                                            $is_rejected = $approval['status'] === 'rejected';
-                                            $approval_class = $is_approved ? 'approved' : ($is_pending ? 'pending' : ($is_rejected ? 'rejected' : 'future'));
-                                        ?>
-                                        <div class="timeline-item <?= $approval_class; ?>">
-                                            <div class="icon">
-                                                <?php if ($is_approved): ?>
-                                                    <i class="fa fa-check"></i>
-                                                <?php elseif ($is_rejected): ?>
-                                                    <i class="fa fa-times"></i>
-                                                <?php elseif ($is_pending): ?>
-                                                    <i class="fa fa-clock"></i>
-                                                <?php else: ?>
-                                                    <i class="fa fa-ellipsis-h"></i>
-                                                <?php endif; ?>
-                                            </div>
-                                            <div class="status">
-                                                <strong><?= 'Level ' . htmlspecialchars($approval['approval_level']); ?></strong>
-                                                <?php if (!empty($approval['approver_name'])): ?>
-                                                    - <?= htmlspecialchars($approval['approver_name']); ?>
-                                                <?php endif; ?>
-                                                <br>
-                                                <small class="text-muted">
-                                                    <?php 
-                                                        if ($is_approved) {
-                                                            echo __('approved');
-                                                        } elseif ($is_rejected) {
-                                                            echo __('rejected');
-                                                        } elseif ($is_pending) {
-                                                            echo __('pending_approval');
-                                                        } else {
-                                                            echo __('awaiting');
-                                                        }
-                                                    ?>
-                                                    <?php if (!empty($approval['approval_date'])): ?>
-                                                        - <?= date('d M Y H:i', strtotime($approval['approval_date'])); ?>
-                                                    <?php endif; ?>
-                                                </small>
-                                            </div>
-                                        </div>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
+                                <!-- Approval chain (includes/approval_steps.php) -->
+                                <?php $rs_status = (string)($resignation['status'] ?? ''); ?>
+                                <div class="report-section"><?= approval_steps_html(approval_steps_rows($approval_chain, $rs_status), $rs_status) ?></div>
                             </div>
                             
                             <!-- Report Footer -->

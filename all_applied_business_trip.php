@@ -380,7 +380,7 @@ if ($can_see_all_depts) {
                                             $type_js = htmlspecialchars((string)$trip_type_text, ENT_QUOTES);
                                             $start_js = htmlspecialchars((string)$trip['trip_start_date'], ENT_QUOTES);
                                             $end_js = htmlspecialchars((string)$trip['trip_end_date'], ENT_QUOTES);
-                                            $report_url = 'business_trip_report_details.php?id=' . $id . '&emp_id=' . urlencode((string)$trip['emp_id']);
+                                            $report_url = 'request_report.php?type=business_trip&id=' . $id . '&emp_id=' . urlencode((string)$trip['emp_id']);
                                             ?>
                                             <tr>
                                                 <td><?= sr_person_cell(getDisplayName(parseName($trip['employee_name'])), $trip['emp_id']) ?></td>

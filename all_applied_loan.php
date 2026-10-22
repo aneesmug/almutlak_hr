@@ -440,7 +440,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                     $loan_status_text = __('pending');
                                                     $loan_tone = 'amber';
                                                 }
-                                                $report_url = 'loan_report_details.php?id=' . (int)$loan['id'] . '&emp_id=' . urlencode($loan['emp_id']);
+                                                $report_url = 'request_report.php?type=loan&id=' . (int)$loan['id'] . '&emp_id=' . urlencode($loan['emp_id']);
                                                 $approve_js = "approveLoanRequest(" . (int)$loan['id'] . ", '" . htmlspecialchars($user_type, ENT_QUOTES) . "', " . $loan['loan_amount'] . ", '" . htmlspecialchars($user_type, ENT_QUOTES) . "', " . ($loan['current_approval_level'] ?? 0) . ", " . (int)($loan['payer_emp_id'] ?? 0) . ", " . (int)$_SESSION['empid'] . ", " . (isset($loan['installments']) ? (int)$loan['installments'] : 1) . ")";
                                                 ?>
                                                 <tr>

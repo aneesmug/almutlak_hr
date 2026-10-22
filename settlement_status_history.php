@@ -262,6 +262,8 @@ if ($typeStmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE typ
 
 $stmt = $conDB->prepare("SELECT ra.approval_level, ra.status, ra.action_date,
                                 COALESCE(e.name, al.fullname, al.username) AS approver_name,
+                                e.avatar AS approver_avatar, e.sex AS approver_sex,
+                                (SELECT dep_nme FROM department WHERE id = e.dept) AS approver_dept_name,
                                 al.user_type
                          FROM request_approvers ra
                          LEFT JOIN employees e ON ra.approver_id = e.emp_id
@@ -295,10 +297,6 @@ $has_deductions = (!empty($settlement['deduction_hours']) && $settlement['deduct
     || (!empty($settlement['deduction_days']) && $settlement['deduction_days'] > 0)
     || (!empty($settlement['other_deductions']) && $settlement['other_deductions'] > 0);
 
-$chain_rows = array_map(function ($c) {
-    $st = in_array($c['status'], ['approved', 'rejected'], true) ? $c['status'] : 'pending';
-    return ['level' => $c['approval_level'], 'name' => getDisplayName($c['approver_name']), 'role' => $c['user_type'] ?? '', 'status' => $st, 'date' => $c['action_date'], 'note' => ''];
-}, $chain);
 $history_rows = array_map(function ($e) {
     return ['status' => $e['status'] ?? '', 'by' => getDisplayName($e['emp_name'] ?? ''), 'date' => $e['created_at'] ?? null, 'note' => getDisplayName($e['note'] ?? '')];
 }, $history);
@@ -313,10 +311,10 @@ echo srh_hero(getDisplayName($settlement['employee_name']), $avatar_path, [
 ], srh_status_pill($settlement['settlement_status']));
 
 echo srh_tiles([
-    [__('amount'), srh_money(round($payableAmount)), 'green', sr_h(ucwords(__($settlement['request_type'] ?? 'N/A')))],
-    [__('deductions'), $has_deductions ? '-' . srh_money($deduction_amount) : '-', $has_deductions ? 'red' : '', ''],
-    [__('created_date'), sr_h(format_safe_date($settlement['created_at'], 'd M Y')), '', ''],
-    [__('settlement_date', 'Settlement Date'), sr_h(!empty($settlement['settlement_date']) ? format_safe_date($settlement['settlement_date'], 'd M Y') : '-'), 'indigo', ''],
+    [__('amount'), srh_money(round($payableAmount)), 'green', sr_h(ucwords(__($settlement['request_type'] ?? 'N/A'))), 'mdi-cash-multiple'],
+    [__('deductions'), $has_deductions ? '-' . srh_money($deduction_amount) : '-', $has_deductions ? 'red' : '', '', 'mdi-minus-circle'],
+    [__('created_date'), sr_h(format_safe_date($settlement['created_at'], 'd M Y')), '', '', 'mdi-calendar-plus'],
+    [__('settlement_date', 'Settlement Date'), sr_h(!empty($settlement['settlement_date']) ? format_safe_date($settlement['settlement_date'], 'd M Y') : '-'), 'indigo', '', 'mdi-calendar-check'],
 ]);
 ?>
 <div class="srh-grid">
@@ -345,7 +343,7 @@ echo srh_tiles([
             [__('final_amount'), !empty($settlement['final_amount']) ? '<strong style="color: var(--sr-accent-strong);">' . srh_money($settlement['final_amount']) . '</strong>' : null, 'mdi-check-all'],
             [__('settlement_date', 'Settlement Date'), !empty($settlement['settlement_date']) ? sr_h(format_safe_date($settlement['settlement_date'], 'd M Y')) : null, 'mdi-calendar'],
         ])) ?>
-        <?= srh_card('mdi-sitemap', __('approval_chain'), srh_chain($chain_rows), count($chain_rows) . ' ' . sr_h(__('levels', 'levels'))) ?>
+        <?= srh_approval_chain($chain, $settlement['settlement_status']) ?>
     </div>
 </div>
 <?= srh_card('mdi-history', __('status_history_timeline'), srh_timeline($history_rows)) ?>
