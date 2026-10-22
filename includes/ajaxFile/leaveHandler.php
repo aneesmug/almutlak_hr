@@ -6004,12 +6004,12 @@ elseif ($ajaxType == 'unassign_asset') {
     if (isset($_POST['profile_img'])) {
         $uploadDir = './../../assets/emp_pics/emp_' . $empId . '/';
         $fileName = 'avatar_' . time() . '_' . mt_rand(1000, 9999) . '.png';
-        $targetPath = $uploadDir . $fileName;
         if (!save_cropped_image($_POST['profile_img'], $uploadDir, $fileName)) {
             echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('invalid_or_corrupt_image_data')]);
             exit;
         }
-        $path = $targetPath;
+        // Stored path is relative to the system root (the file-system path above is relative to this script)
+        $path = './assets/emp_pics/emp_' . $empId . '/' . $fileName;
     }
     // --- Handle standard file uploads (for other document types in the future) ---
     else if (isset($_FILES['file']) && $_FILES['file']['error'] == UPLOAD_ERR_OK) {

@@ -8,6 +8,7 @@
 require_once __DIR__ . '/special_access_helper.php';
 require_once __DIR__ . '/cost_centers.php';
 require_once __DIR__ . '/eos_rehire.php';
+require_once __DIR__ . '/employee_avatar.php';
 
 /** Who may edit what. `modify` = may open/save the edit form at all. */
 function employee_edit_permissions(): array
@@ -259,6 +260,9 @@ function employee_apply_edit(array $formData, array $perm): array
 	if ($setReactivated && !$rehireEos && $newStatus === '1') {
 		$pdo->prepare("UPDATE `admin_login` SET `status` = 1 WHERE `emp_id` = :emp_id")->execute([':emp_id' => $employee_id_from_form]);
 	}
+
+	// Avatar follows the gender when it is a default picture; a lost upload falls back the same way
+	employee_avatar_sync($GLOBALS['conDB'], $targetEmpId);
 
 	// Keep admin_login.dept in sync with employees.dept (all_users.php reads admin_login's own copy).
 	if (isset($params[':dept'])) {

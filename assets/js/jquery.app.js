@@ -33,6 +33,35 @@ window.APP_COLORS = {}; // Initialize empty, will be populated by fetch
     xhr.send(null);
 })();
 
+// Employee pictures: any <img> under assets/emp_pics/ that fails to load (file deleted / lost,
+// wrong path) is swapped to includes/avatar_image.php, which sends the employee's real picture
+// or the default for their gender and fixes the stored avatar (includes/employee_avatar.php).
+// Capture phase, so it also covers pictures added later by AJAX lists, DataTables and popups.
+(function() {
+    'use strict';
+    var me = document.currentScript && document.currentScript.src;
+    // .../assets/js/jquery.app.js -> .../includes/avatar_image.php (works from sub-folder pages too)
+    var endpoint = me ? me.replace(/assets\/js\/jquery\.app\.js.*$/, 'includes/avatar_image.php') : './includes/avatar_image.php';
+    function fixAvatar(img) {
+        if (!img || img.tagName !== 'IMG' || img.dataset.avatarFallback) return;
+        var src = img.getAttribute('src') || '';
+        if (src.indexOf('emp_pics/') === -1) return;
+        img.dataset.avatarFallback = '1'; // only once - never loop
+        var sex = img.getAttribute('data-sex') || '';
+        img.src = endpoint + '?src=' + encodeURIComponent(src) + (sex ? '&sex=' + encodeURIComponent(sex) : '');
+    }
+    document.addEventListener('error', function(e) { fixAvatar(e.target); }, true);
+    // This file loads at the end of most pages - pictures that already failed before it ran
+    function scanBroken() {
+        var imgs = document.querySelectorAll('img[src*="emp_pics/"]');
+        for (var i = 0; i < imgs.length; i++) {
+            if (imgs[i].complete && imgs[i].naturalWidth === 0) fixAvatar(imgs[i]);
+        }
+    }
+    scanBroken();
+    window.addEventListener('load', scanBroken);
+})();
+
 // Option 2: Reusable function with optional attributes
 function loadResource(src, type = 'js', attributes = {}, position = 'head') {
   let element;

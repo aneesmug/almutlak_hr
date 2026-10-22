@@ -13,6 +13,16 @@ require_once __DIR__ . '/special_access_helper.php';
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
 
+// Avatar: uploaded picture if its file exists, else the newest upload on disk, else the gender default
+require_once __DIR__ . '/employee_avatar.php';
+if (!empty($emprow['empid'])) {
+	employee_avatar_sync($conDB, (string)$emprow['empid']);
+	$emprow['avatar'] = employee_avatar_resolve([
+		'avatar' => $emprow['avatar'] ?? '', 'sex' => $emprow['sex'] ?? '', 'emp_id' => (string)$emprow['empid'],
+		'id' => $emprow['eid'] ?? '', 'name' => $emprow['name'] ?? '',
+	], employee_avatar_unapproved_files($conDB));
+}
+
 // Calculate employee modification permission - matches includes/employee_card.php's
 // $can_modify_employee (was missing the 'access_edit_employee' special access grant
 // here, so a granted employee still never saw Edit/Note in this "More Actions" menu).

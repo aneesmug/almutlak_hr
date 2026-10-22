@@ -139,7 +139,8 @@ $u = "UPDATE `section` SET `section_name`='".$section_name_po."', `dept`='".$dep
 
 }
 
-if($emp_avatar_get == "./assets/emp_pics/defult.png"){
+require_once __DIR__ . '/includes/employee_avatar.php';
+	if (employee_avatar_is_default($emp_avatar_get)) { // male or female default picture
 		$image_txt = "Upload Employee Picture";
 	} else {
 		$image_txt = "Change Picture";

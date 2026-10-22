@@ -87,6 +87,20 @@ function zk_sync_run_daily_reminder()
             error_log('[ZK] document expiry alerts failed: ' . $e->getMessage());
         }
     }
+
+    // Employee avatars (includes/employee_avatar.php): lost uploads / wrong-gender defaults, same daily guard.
+    $avatarReport = __DIR__ . '/cron_logs/last_avatar_sync_report.json';
+    $lastAvatar = file_exists($avatarReport) ? json_decode((string) @file_get_contents($avatarReport), true) : null;
+    if (!(is_array($lastAvatar) && substr((string) ($lastAvatar['timestamp'] ?? ''), 0, 10) === date('Y-m-d'))) {
+        try {
+            require_once __DIR__ . '/includes/db.php';
+            require_once __DIR__ . '/includes/employee_avatar.php';
+            $avatarSummary = employee_avatar_sync($conDB);
+            @file_put_contents($avatarReport, json_encode(['timestamp' => date('Y-m-d H:i:s')] + $avatarSummary, JSON_PRETTY_PRINT));
+        } catch (\Throwable $e) {
+            error_log('[ZK] avatar sync failed: ' . $e->getMessage());
+        }
+    }
 }
 
 header('Content-Type: application/json; charset=UTF-8');

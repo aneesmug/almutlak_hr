@@ -7,6 +7,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
 require_once __DIR__ . '/../FileUploader.php';
+require_once __DIR__ . '/../employee_avatar.php';
 require_once __DIR__ . '/../D365/d365_hooks.php';
 require_once __DIR__ . '/../cost_centers.php';
 cost_center_ensure_column($conDB);
@@ -367,7 +368,7 @@ if ($action === 'create_company_employee') {
     $d365Company = ecm_d365_company_for($data['comp_no'] ?? '');
     $data['dept'] = $data['department'] ?? null;
     unset($data['department']);
-    $data['avatar'] = ($data['sex'] == 1) ? "./assets/emp_pics/defult.png" : "./assets/emp_pics/defultFemale.jpg";
+    $data['avatar'] = employee_avatar_default($data['sex']);
 
     try {
         $columns = [];
@@ -539,7 +540,9 @@ if ($action === 'create_man_power_employee') {
     $d365Company = ecm_d365_company_for($comp_no); // mapping of the app company (D365 Config > Companies)
     $country = trim($_POST['country'] ?? '');
     $dob = trim($_POST['dob'] ?? '');
-    $sex = trim($_POST['sex'] ?? 'male');
+    // employees.sex is 1 = male / 2 = female everywhere else - the Man Power form posts 'male' / 'female'
+    $sexRaw = strtolower(trim((string)($_POST['sex'] ?? 'male')));
+    $sex = ($sexRaw === 'female' || $sexRaw === '2') ? '2' : '1';
     $iqama_exp_g = trim($_POST['iqama_exp_g'] ?? '');
     $iqama_exp = trim($_POST['iqama_exp'] ?? ''); // Hijri expiry - was collected by the form but never saved
     $emp_sup_type = "man_power";
@@ -562,17 +565,19 @@ if ($action === 'create_man_power_employee') {
         $extension = FileUploader::validate($file, ['jpg', 'jpeg', 'png', 'gif']);
 
         if ($extension !== null) {
-            $safe_iqama = preg_replace('/[^a-zA-Z0-9_-]/', '', $iqama);
-            $image_path = "./assets/emp_pics/" . $safe_iqama . "_" . time() . "." . $extension;
+            // Same place as profile uploads (assets/emp_pics/emp_<emp_id>/). The file goes to the real
+            // folder - a "./assets/..." target is relative to includes/ajaxFile/ here and was lost.
+            $safe_emp_id = preg_replace('/[^0-9]/', '', (string)$emp_id);
+            $image_path = "./assets/emp_pics/emp_" . $safe_emp_id . "/avatar_" . time() . "." . $extension;
 
-            if (!FileUploader::moveTo($file['tmp_name'], $image_path, 'image')) {
+            if ($safe_emp_id === '' || !FileUploader::moveTo($file['tmp_name'], dirname(__DIR__, 2) . '/' . substr($image_path, 2), 'image')) {
                 $image_path = '';
             }
         }
     }
 
     if (empty($image_path)) {
-        $image_path = ($sex === "male") ? "./assets/emp_pics/defult.png" : "./assets/emp_pics/defultFemale.jpg";
+        $image_path = employee_avatar_default($sex);
     }
 
     if (empty($name_emp) || empty($emp_id) || empty($iqama) || empty($department) || empty($comp_no) || empty($salary)) {

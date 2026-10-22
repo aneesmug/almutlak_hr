@@ -90,7 +90,8 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
 	
 }
 
-	if($emp_avatar_get == "./assets/emp_pics/defult.png"){
+	require_once __DIR__ . '/includes/employee_avatar.php';
+	if (employee_avatar_is_default($emp_avatar_get)) { // male or female default picture
 		$image_txt = "Upload Employee Picture";
 	} else {
 		$image_txt = "Change Picture";
