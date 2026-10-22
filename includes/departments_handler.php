@@ -43,27 +43,12 @@ switch ($action) {
         break;
 }
 
-function normalizeDepartmentColor(string $color): ?string
-{
-    $color = strtolower(trim($color));
-    if ($color === '') {
-        return null;
-    }
-
-    $allowedColors = ['custom', 'purple', 'primary', 'success'];
-    if (!in_array($color, $allowedColors, true)) {
-        return null;
-    }
-
-    return $color;
-}
-
 function getDepartments(): void
 {
     global $conDB;
 
     try {
-        $sql = "SELECT id, dep_nme, dep_nme_ar, dept_clr FROM department ORDER BY dep_nme ASC";
+        $sql = "SELECT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme ASC";
         $result = mysqli_query($conDB, $sql);
 
         if (!$result) {
@@ -95,7 +80,7 @@ function getDepartment(): void
     }
 
     try {
-        $sql = "SELECT id, dep_nme, dep_nme_ar, dept_clr FROM department WHERE id = ?";
+        $sql = "SELECT id, dep_nme, dep_nme_ar FROM department WHERE id = ?";
         $stmt = $conDB->prepare($sql);
 
         if (!$stmt) {
@@ -128,17 +113,10 @@ function addDepartment(): void
 
     $departmentEn = trim((string)($_POST['department_en'] ?? ''));
     $departmentAr = trim((string)($_POST['department_ar'] ?? ''));
-    $departmentColor = normalizeDepartmentColor((string)($_POST['department_color'] ?? ''));
 
     if ($departmentEn === '' || $departmentAr === '') {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Both English and Arabic department names are required']);
-        return;
-    }
-
-    if ($departmentColor === null) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'A valid department color class is required']);
         return;
     }
 
@@ -158,14 +136,14 @@ function addDepartment(): void
         }
         $duplicateStmt->close();
 
-        $sql = "INSERT INTO department (dep_nme, dep_nme_ar, dept_clr) VALUES (?, ?, ?)";
+        $sql = "INSERT INTO department (dep_nme, dep_nme_ar) VALUES (?, ?)";
         $stmt = $conDB->prepare($sql);
 
         if (!$stmt) {
             throw new Exception($conDB->error);
         }
 
-        $stmt->bind_param('sss', $departmentEn, $departmentAr, $departmentColor);
+        $stmt->bind_param('ss', $departmentEn, $departmentAr);
 
         if (!$stmt->execute()) {
             throw new Exception($stmt->error);
@@ -186,17 +164,10 @@ function updateDepartment(): void
     $departmentId = (int)($_POST['department_id'] ?? 0);
     $departmentEn = trim((string)($_POST['department_en'] ?? ''));
     $departmentAr = trim((string)($_POST['department_ar'] ?? ''));
-    $departmentColor = normalizeDepartmentColor((string)($_POST['department_color'] ?? ''));
 
     if ($departmentId <= 0 || $departmentEn === '' || $departmentAr === '') {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Department ID and both names are required']);
-        return;
-    }
-
-    if ($departmentColor === null) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'A valid department color class is required']);
         return;
     }
 
@@ -216,14 +187,14 @@ function updateDepartment(): void
         }
         $duplicateStmt->close();
 
-        $sql = "UPDATE department SET dep_nme = ?, dep_nme_ar = ?, dept_clr = ? WHERE id = ?";
+        $sql = "UPDATE department SET dep_nme = ?, dep_nme_ar = ? WHERE id = ?";
         $stmt = $conDB->prepare($sql);
 
         if (!$stmt) {
             throw new Exception($conDB->error);
         }
 
-        $stmt->bind_param('sssi', $departmentEn, $departmentAr, $departmentColor, $departmentId);
+        $stmt->bind_param('ssi', $departmentEn, $departmentAr, $departmentId);
 
         if (!$stmt->execute()) {
             throw new Exception($stmt->error);

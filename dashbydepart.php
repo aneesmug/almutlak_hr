@@ -6,7 +6,6 @@ $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" .
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
 
-$color = array("primary", "success", "info", "warning", "danger", "dark");
 
 // Access scope labels for dashboard card
 $allowed_company_names = 'All Companies';
@@ -35,6 +34,23 @@ if (!empty($allowed_employees_array)) {
         $allowed_employee_names = $emp_row['names'];
     }
 }
+
+// Access Scope card: [allowed count, total, name list] per scope. Empty name list = full access.
+$scope_split = function ($names, $all_label) {
+    $names = trim((string)$names);
+    return ($names === '' || $names === $all_label) ? [] : array_values(array_filter(array_map('trim', explode(',', $names)), 'strlen'));
+};
+$scope_count = function ($sql) use ($conDB) {
+    $res = mysqli_query($conDB, $sql);
+    $row = $res ? mysqli_fetch_row($res) : null;
+    return $row ? (int)$row[0] : 0;
+};
+$scope_company_list = $scope_split($allowed_company_names, 'All Companies');
+$scope_department_list = $scope_split($allowed_department_names, 'All Departments');
+$scope_employee_list = $scope_split($allowed_employee_names, '');
+$scope_company_total = $scope_count("SELECT COUNT(*) FROM `companies`");
+$scope_department_total = $scope_count("SELECT COUNT(*) FROM `department`");
+$scope_employee_total = $scope_employee_list ? $scope_count("SELECT COUNT(*) FROM `employees` WHERE `status` = 1") : 0;
 
 // Fallback department scope (legacy-safe):
 // If user has no explicit allowed_departments/allowed_employees restrictions,
@@ -111,220 +127,136 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                 overflow: hidden !important;
             }
 
-            /* Modern Stats Card Design */
-            .stats-card {
-                border-radius: 16px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-                padding: 32px 24px 24px 24px;
-                margin-bottom: 28px;
-                transition: box-shadow 0.2s, transform 0.2s;
-                border: none;
+            /* Org tiles (By Department + Companies drilldown) - one accent for every card */
+            .dd-tile {
                 position: relative;
-                min-height: 180px;
                 display: flex;
-                flex-direction: row;
-                align-items: center;
-                background: var(--card-gradient, linear-gradient(90deg,#2196f3 0%,#21cbf3 100%));
-                color: #fff;
+                flex-direction: column;
+                gap: 14px;
+                height: calc(100% - 24px);
+                margin-bottom: 24px;
+                padding: 18px 18px 16px;
+                background: var(--sr-surface, #fff);
+                border: 1px solid var(--sr-border, #e5e7eb);
+                border-radius: var(--sr-radius, 14px);
+                box-shadow: var(--sr-shadow);
+                color: var(--sr-text, #0f172a);
+                text-align: start;
+                text-decoration: none;
+                cursor: pointer;
                 overflow: hidden;
+                transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
             }
-            .stats-card:hover {
-                box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-                transform: translateY(-4px) scale(1.02);
-            }
-            .stats-card-icon {
-                background: rgba(255,255,255,0.18);
-                border-radius: 50%;
-                width: 72px;
-                height: 72px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 40px;
-                margin-right: 28px;
-                box-shadow: 0 2px 16px rgba(0,0,0,0.12);
-                position: relative;
-                transition: transform 0.2s;
-                flex-direction: column;
-            }
-            .stats-card-count-circle {
-                background: #fff;
-                color: #2196f3;
-                border-radius: 50%;
-                width: 38px;
-                height: 38px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 20px;
-                font-weight: 700;
-                margin-bottom: 6px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.10);
-            }
-            .stats-card-icon i {
-                font-size: 28px;
-                color: #2196f3;
-            }
-            .stats-card-icon:hover {
-                transform: scale(1.10) rotate(-6deg);
-            }
-            .stats-card-icon .stats-card-tooltip {
-                display: none;
+            .dd-tile::before {
+                content: "";
                 position: absolute;
-                top: -32px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: #222;
-                color: #fff;
-                padding: 4px 10px;
-                border-radius: 6px;
-                font-size: 12px;
-                white-space: nowrap;
-                z-index: 10;
+                inset-block: 0;
+                inset-inline-start: 0;
+                width: 3px;
+                background: var(--sr-accent, #6366f1);
+                opacity: 0;
+                transition: opacity .15s ease;
             }
-            .stats-card-icon:hover .stats-card-tooltip {
-                display: block;
+            .dd-tile:hover,
+            .dd-tile:focus-visible {
+                color: var(--sr-text, #0f172a);
+                text-decoration: none;
+                border-color: var(--sr-accent, #6366f1);
+                box-shadow: 0 8px 24px rgba(99, 102, 241, .12);
+                transform: translateY(-2px);
+                outline: 0;
             }
-            .stats-card-content {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                align-items: flex-start;
-                position: relative;
-            }
-            .stats-card-badge {
-                position: absolute;
-                top: 0;
-                right: 0;
-                background: #50a5f1;
-                color: #fff;
-                font-size: 11px;
-                font-weight: 600;
-                padding: 2px 8px;
-                border-radius: 8px;
-                box-shadow: 0 2px 8px rgba(80,165,241,0.12);
-                z-index: 2;
-            }
-            .stats-card-value {
-                font-size: 36px;
-                font-weight: 700;
-                color: #222;
-                margin-bottom: 4px;
-            }
-            .stats-card-label {
-                font-size: 18px;
-                font-weight: 700;
-                color: #fff;
-                margin-bottom: 12px;
-                letter-spacing: 0.5px;
-            }
-            .stats-card-footer {
-                display: flex;
-                align-items: center;
-                gap: 18px;
-            }
-            .stats-card-percentage {
-                font-size: 15px;
-                font-weight: 600;
-                display: flex;
-                align-items: center;
-            }
-            .stats-card-percentage.positive {
-                color: #34c38f;
-            }
-            .stats-card-percentage.negative {
-                color: #f46a6a;
-            }
-            .stats-card-percentage i {
-                font-size: 18px;
-                margin-right: 4px;
-            }
-            .stats-card-status {
-                font-size: 13px;
-                font-weight: 600;
-                color: #34c38f;
-                background: #eaf7ea;
-                border-radius: 8px;
-                padding: 2px 10px;
-            }
-            .stats-card-status.active {
-                color: #34c38f;
-                background: #eaf7ea;
-            }
-            @media (max-width: 767px) {
-                .stats-card {
-                    flex-direction: column;
-                    align-items: flex-start;
-                    padding: 16px 8px;
-                    min-height: 160px;
-                }
-                .stats-card-icon {
-                    margin-bottom: 10px;
-                    margin-right: 0;
-                }
-                .stats-card-value {
-                    font-size: 26px;
-                }
-            }
-            /* Badge-based card styling for Allowed Employees */
-            .allowed-employees-card {
-                background: #f8f9fa;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 16px;
-            }
-
-            .allowed-employees-card-title {
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                font-size: 13px;
-                color: #333;
-                margin-bottom: 12px;
-                font-weight: 600;
-            }
-
-            .allowed-employees-card-content {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 6px;
-                max-height: 160px;
-                overflow-y: auto;
-                padding-right: 4px;
-            }
-            .allowed-employees-card-content::-webkit-scrollbar {
-                width: 6px;
-            }
-            .allowed-employees-card-content::-webkit-scrollbar-thumb {
-                background: rgba(0, 0, 0, 0.18);
-                border-radius: 6px;
-            }
-            .allowed-employees-card-content::-webkit-scrollbar-track {
-                background: transparent;
-            }
-
-            .allowed-employees-card .employee-badge {
+            .dd-tile:hover::before,
+            .dd-tile:focus-visible::before { opacity: 1; }
+            .dd-tile-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+            .dd-tile-ico {
+                flex: 0 0 40px;
+                width: 40px;
+                height: 40px;
                 display: inline-flex;
                 align-items: center;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: #fff;
-                padding: 6px 12px;
-                border-radius: 20px;
-                font-size: 12px;
-                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-                white-space: nowrap;
+                justify-content: center;
+                border-radius: 11px;
+                background: var(--sr-accent-soft, #eef2ff);
+                color: var(--sr-accent-strong, #4f46e5);
+                font-size: 18px;
             }
+            .dd-tile-name {
+                flex: 1 1 auto;
+                min-width: 0;
+                font-size: 14px;
+                font-weight: 700;
+                letter-spacing: .2px;
+                line-height: 1.3;
+                color: var(--sr-text, #0f172a);
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .dd-tile-go {
+                flex: 0 0 auto;
+                font-size: 20px;
+                color: var(--sr-muted, #64748b);
+                transition: transform .15s ease, color .15s ease;
+            }
+            [dir="rtl"] .dd-tile-go { transform: scaleX(-1); }
+            .dd-tile:hover .dd-tile-go { color: var(--sr-accent, #6366f1); transform: translateX(3px); }
+            [dir="rtl"] .dd-tile:hover .dd-tile-go { transform: scaleX(-1) translateX(3px); }
+            .dd-tile-stat { display: flex; align-items: baseline; gap: 6px; margin-top: auto; }
+            .dd-tile-count {
+                font-size: 30px;
+                font-weight: 700;
+                line-height: 1;
+                color: var(--sr-text, #0f172a);
+                font-variant-numeric: tabular-nums;
+            }
+            .dd-tile-unit { font-size: 12.5px; font-weight: 600; color: var(--sr-muted, #64748b); }
+            .dd-tile-bar {
+                height: 6px;
+                border-radius: 999px;
+                background: var(--sr-surface-3, #f1f5f9);
+                overflow: hidden;
+            }
+            .dd-tile-bar > span {
+                display: block;
+                height: 100%;
+                border-radius: inherit;
+                background: var(--sr-accent, #6366f1);
+            }
+            [dir="rtl"] .dd-tile-bar > span { transform-origin: right center; }
+            .dd-tile-pct { font-size: 12px; color: var(--sr-muted, #64748b); }
+            .dd-tile-pct b { color: var(--sr-text-2, #334155); font-weight: 700; }
+            /* Unassigned / unlisted buckets: same accent, dashed outline marks them as a catch-all */
+            .dd-tile.drilldown-tile-unassigned { border-style: dashed; background: var(--sr-surface-2, #f8fafc); }
 
-            .allowed-employees-card .employee-badge.all-employees {
-                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-                color: #333;
-                box-shadow: 0 2px 8px rgba(168, 237, 234, 0.3);
+            /* Access scope (same design as dashboard.php) */
+            .dash-scope { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px; }
+            @media (max-width: 991px) { .dash-scope { grid-template-columns: 1fr; } }
+            .dash-scope-item {
+                --sc: #6366f1; --sc-fg: #5b21b6; --sc-bg: #f5f3ff;
+                position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+                padding: 18px; border-radius: 14px; border: 1px solid var(--sr-border); background: var(--sr-surface, #fff);
+                transition: transform .15s, box-shadow .15s, border-color .15s;
             }
-
-            .allowed-employees-card .no-data-message {
-                color: #999;
-                font-size: 13px;
-                font-style: italic;
-            }
+            .dash-scope-item::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, var(--sc), color-mix(in srgb, var(--sc) 35%, transparent)); }
+            .dash-scope-item.sc-sky { --sc: #0ea5e9; --sc-fg: var(--tone-sky-fg); --sc-bg: var(--tone-sky-bg); }
+            .dash-scope-item.sc-green { --sc: #10b981; --sc-fg: var(--tone-green-fg, #047857); --sc-bg: var(--tone-green-bg, #ecfdf5); }
+            .dash-scope-item:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--sc) 45%, var(--sr-border)); box-shadow: 0 12px 28px -10px color-mix(in srgb, var(--sc) 45%, transparent); }
+            html.app-dark .dash-scope-item.sc-violet { --sc-fg: #c4b5fd; --sc-bg: #2a2350; }
+            .dash-scope-head { display: flex; align-items: center; gap: 10px; }
+            .dash-scope-icon { width: 38px; height: 38px; border-radius: 11px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; background: var(--sc-bg); color: var(--sc-fg); }
+            .dash-scope-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: var(--sr-text); }
+            .dash-scope-pill { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--sc-bg); color: var(--sc-fg); white-space: nowrap; }
+            .dash-scope-main { display: flex; align-items: baseline; gap: 8px; }
+            .dash-scope-count { font-size: 30px; font-weight: 800; line-height: 1.1; letter-spacing: -.5px; color: var(--sc-fg); font-variant-numeric: tabular-nums; }
+            .dash-scope-of { font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+            .dash-scope-bar { height: 6px; border-radius: 999px; background: var(--sr-surface-3, #eef1f5); overflow: hidden; }
+            .dash-scope-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--sc); }
+            .dash-scope-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 112px; overflow-y: auto; padding-top: 12px; border-top: 1px dashed var(--sr-border); }
+            .dash-scope-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--sr-surface-2, #f8fafc); border: 1px solid var(--sr-border); color: var(--sr-text-2, var(--sr-text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .dash-scope-chip.is-all { background: var(--sc-bg); border-color: transparent; color: var(--sc-fg); }
+            .dash-scope-chip.is-more { background: transparent; border-style: dashed; color: var(--sr-muted); cursor: help; }
 
             /* Org drilldown - breadcrumb */
             .drilldown-breadcrumb {
@@ -392,11 +324,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                 .drilldown-crumb {
                     flex-shrink: 0;
                 }
-            }
-
-            /* Org drilldown - tiles */
-            .drilldown-tile-unassigned {
-                background: linear-gradient(90deg,#6c757d 0%,#868e96 100%) !important;
             }
 
             /* Org drilldown - employees search toolbar (reused from filter_employee_by_comp.php) */
@@ -612,10 +539,8 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                 count(`employees`.`dept`) AS `empcountgrp`,
                                                 `employees`.`dept`, 
                                                 `department`.`dep_nme`,
-                                                `department`.`dep_nme_ar`,
-                                                `department`.`dept_clr` AS `color`
+                                                `department`.`dep_nme_ar`
                                                 FROM `employees` 
-                                                -- LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
                                                 LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
                                                 WHERE `employees`.`status` = 1" . $company_filter . $department_filter . $employee_filter . $fallback_dept_filter_employees . "
                                                 GROUP BY `employees`.`dept`
@@ -623,44 +548,22 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                             
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
                                             if ($querygrp) {
-                                                $allowedCardColors = ["custom", "purple", "primary", "success"];
                                                 // Total active employees (for percentage calculation) - must respect access filters
                                                 $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter . $department_filter . $employee_filter . $fallback_dept_filter_plain);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
-                                                    $rawCardColor = strtolower(trim((string)($rec["color"] ?? '')));
-                                                    $cardColor = in_array($rawCardColor, $allowedCardColors, true) ? $rawCardColor : 'custom';
                                                     $deptCount = (int)$rec["empcountgrp"];
                                                     $percentage = round(($deptCount / $totalEmployees) * 100, 1);
-                                            ?>
-                                                <div class="col-sm-4 col-xl-3" onclick="window.location.href='filter_employee_by_dept.php?page=1&status=1&status=active&dept=<?= $rec["dept"] ?>'" style="cursor: pointer;">
-                                                    <div class="stats-card professional-theme theme-<?= $cardColor ?>" data-color="<?= $cardColor ?>">
-                                                        <div class="stats-card-icon professional-theme theme-<?= $cardColor ?>" data-color="<?= $cardColor ?>">
-                                                            <div class="stats-card-count-circle"><?= $deptCount ?></div>
-                                                            <span class="stats-card-tooltip">Department Info</span>
-                                                            <i class="fa fa-building"></i>
-                                                        </div>
-                                                        <div class="stats-card-content">
-                                                            <div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= ($is_rtl ?? false) ? $rec["dep_nme_ar"] : $rec["dep_nme"] ?></div>
-                                                            <div class="stats-card-footer">
-                                                                <span class="stats-card-percentage positive">
-                                                                    <i class="mdi mdi-trending-up"></i>
-                                                                </span>
-                                                            </div>
-                                                            <!-- Progress from department share of total employees -->
-                                                            <div style="width:100%;margin-top:18px;">
-                                                                <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-                                                                    <div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?= $percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-                                                                </div>
-                                                                <div class="stats-card-pct" style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-                                                                    <?= $percentage ?>% <?=__('of_total_employees') ?>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            <?php 
+                                                    echo generate_drilldown_tile(
+                                                        $deptCount,
+                                                        ($is_rtl ?? false) ? ($rec["dep_nme_ar"] ?: $rec["dep_nme"]) : ($rec["dep_nme"] ?: $rec["dep_nme_ar"]),
+                                                        'fa fa-building',
+                                                        $percentage,
+                                                        [],
+                                                        '',
+                                                        'filter_employee_by_dept.php?page=1&status=active&dept=' . urlencode((string)$rec["dept"])
+                                                    );
                                                 } // end while
                                             } // end if ($querygrp)
                                             ?>
@@ -696,16 +599,12 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                 GROUP BY `employees`.`comp_no`");
 
                                             if ($querygrp) {
-                                                $colorArr = ["primary","success","warning","danger","info","dark"];
-                                                $colorCount = count($colorArr);
-                                                $cardIndex = 0;
                                                 $company_filter_total = getCompanyFilterSQL('comp_no', true);
                                                 $employee_filter_total = getEmployeeFilterSQL('emp_id', true);
                                                 $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter_total . $employee_filter_total . $fallback_dept_filter_plain);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
-                                                    $cardColor = $colorArr[$cardIndex % $colorCount];
                                                     $compCount = (int)$rec["empcountgrp"];
                                                     $percentage = round(($compCount / $totalEmployees) * 100, 1);
                                                     $compLabel = ($is_rtl ?? false) ? ($rec["comp_name_ar"] ?: $rec["comp_name"]) : ($rec["comp_name"] ?: $rec["comp_name_ar"]);
@@ -713,11 +612,9 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                         $compCount,
                                                         $compLabel ?: ('Company #' . $rec["comp_no"]),
                                                         'fa fa-industry',
-                                                        $cardColor,
                                                         $percentage,
                                                         ['next-level' => 'cities', 'company' => $rec["comp_no"], 'company-name' => $compLabel]
                                                     );
-                                                    $cardIndex++;
                                                 } // end while
                                             } // end if ($querygrp)
                                             ?>
@@ -951,31 +848,58 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                 </div>
                         </div>
 
-                        <div class="card-box">
-                            <h4 class="m-t-0 header-title"><?= __('access_scope') ?: 'Access Scope' ?></h4>
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
-                                        <h5 class="m-t-0"><?= __('allowed_companies') ?: 'Allowed Companies' ?></h5>
-                                        <div class="small text-muted"><?= htmlspecialchars($allowed_company_names) ?></div>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
-                                        <h5 class="m-t-0"><?= __('allowed_departments') ?: 'Allowed Departments' ?></h5>
-                                        <div class="small text-muted"><?= htmlspecialchars($allowed_department_names) ?></div>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <?php if (!empty($allowed_employee_names)): ?>
-                                    <div class="allowed-employees-card" id="allowed-employees-badge-card">
-                                        <div class="allowed-employees-card-title"><?= __('allowed_employees') ?: 'Allowed Employees' ?></div>
-                                        <div class="allowed-employees-card-content" id="allowed-employees-container">
-                                            <!-- Badges will be populated by JavaScript -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><i class="fa fa-shield-halved"></i> <?= __('access_scope') ?: 'Access Scope' ?></h5>
+                            </div>
+                            <?php
+                            // [tone, icon, title, allowed names (empty = all), total, "all" label]
+                            $dash_scopes = [
+                                ['violet', 'fa-building', __('allowed_companies') ?: 'Allowed Companies', $scope_company_list, $scope_company_total, __('all_companies', 'All Companies')],
+                                ['sky', 'fa-sitemap', __('allowed_departments') ?: 'Allowed Departments', $scope_department_list, $scope_department_total, __('all_departments', 'All Departments')],
+                            ];
+                            if ($scope_employee_list) {
+                                $dash_scopes[] = ['green', 'fa-users', __('allowed_employees') ?: 'Allowed Employees', $scope_employee_list, $scope_employee_total, ''];
+                            }
+                            $scope_chip_max = 12;
+                            ?>
+                            <div class="dash-scope">
+                                <?php foreach ($dash_scopes as [$sc_tone, $sc_icon, $sc_title, $sc_list, $sc_total, $sc_all_label]):
+                                    $sc_full = !$sc_list;
+                                    $sc_count = $sc_full ? $sc_total : count($sc_list);
+                                    $sc_pct = $sc_full ? 100 : ($sc_total > 0 ? min(100, round($sc_count / $sc_total * 100, 1)) : 100);
+                                ?>
+                                    <div class="dash-scope-item sc-<?= $sc_tone ?>">
+                                        <div class="dash-scope-head">
+                                            <span class="dash-scope-icon"><i class="fa <?= $sc_icon ?>"></i></span>
+                                            <span class="dash-scope-title"><?= htmlspecialchars($sc_title) ?></span>
+                                            <?php if ($sc_full): ?>
+                                                <span class="dash-scope-pill"><i class="fa fa-circle-check"></i> <?= __('full_access', 'Full access') ?></span>
+                                            <?php else: ?>
+                                                <span class="dash-scope-pill"><i class="fa fa-filter"></i> <?= __('restricted', 'Restricted') ?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div>
+                                            <div class="dash-scope-main">
+                                                <span class="dash-scope-count"><?= number_format($sc_count) ?></span>
+                                                <?php if ($sc_total > 0): ?><span class="dash-scope-of"><?= __('of', 'of') ?> <?= number_format($sc_total) ?></span><?php endif; ?>
+                                            </div>
+                                            <div class="dash-scope-bar" style="margin-top: 8px;"><span style="width: <?= $sc_pct ?>%;"></span></div>
+                                        </div>
+                                        <div class="dash-scope-chips">
+                                            <?php if ($sc_full): ?>
+                                                <span class="dash-scope-chip is-all"><i class="fa fa-infinity"></i> <?= htmlspecialchars($sc_all_label) ?></span>
+                                            <?php else: ?>
+                                                <?php foreach (array_slice($sc_list, 0, $scope_chip_max) as $sc_name): ?>
+                                                    <span class="dash-scope-chip" title="<?= htmlspecialchars($sc_name) ?>"><?= htmlspecialchars($sc_name) ?></span>
+                                                <?php endforeach; ?>
+                                                <?php if (count($sc_list) > $scope_chip_max): ?>
+                                                    <span class="dash-scope-chip is-more" title="<?= htmlspecialchars(implode(', ', array_slice($sc_list, $scope_chip_max))) ?>">+<?= count($sc_list) - $scope_chip_max ?> <?= __('more', 'more') ?></span>
+                                                <?php endif; ?>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
-                                    <?php endif; ?>
-                                </div>
+                                <?php endforeach; ?>
                             </div>
                         </div>
 
@@ -1132,16 +1056,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                     $('a[href="#onlineusers-b1"]').on('shown.bs.tab', refreshOnlineUsers);
                 }
 
-            });
-
-            // Initialize Allowed Employees Badge Card
-            $(document).ready(function() {
-                var employeeNames = '<?= htmlspecialchars($allowed_employee_names ?? '', ENT_QUOTES, 'UTF-8') ?>';
-                var container = $('#allowed-employees-container');
-                if (container.length && typeof renderAllowedEmployeesCard === 'function') {
-                    var badgeHTML = renderAllowedEmployeesCard(employeeNames);
-                    container.html(badgeHTML);
-                }
             });
         </script>
 

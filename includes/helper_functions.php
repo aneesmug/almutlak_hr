@@ -1694,31 +1694,37 @@ if (!function_exists('generate_pagination_controls')) {
  * so every level looks identical.
  */
 if (!function_exists('generate_drilldown_tile')) {
-    function generate_drilldown_tile($count, $label, $icon, $color, $percentage, array $data_attrs, $extra_class = '')
+    function generate_drilldown_tile($count, $label, $icon, $percentage, array $data_attrs, $extra_class = '', $href = null)
     {
         $data_html = '';
         foreach ($data_attrs as $key => $value) {
             $data_html .= ' data-' . htmlspecialchars($key, ENT_QUOTES) . '="' . htmlspecialchars((string)$value, ENT_QUOTES) . '"';
         }
         $percentage = max(0, min(100, (float)$percentage));
+        $label = htmlspecialchars((string)$label, ENT_QUOTES);
+
+        // Plain link tiles (By Department tab) navigate; the rest are AJAX drilldown tiles
+        $tag = $href !== null ? 'a' : 'div';
+        $attrs = $href !== null
+            ? ' href="' . htmlspecialchars($href, ENT_QUOTES) . '"'
+            : ' role="button" tabindex="0"';
+        $classes = 'dd-tile' . ($href === null ? ' drilldown-tile' : '') . ($extra_class !== '' ? ' ' . htmlspecialchars($extra_class, ENT_QUOTES) : '');
 
         return '
-        <div class="col-sm-4 col-xl-3">
-            <div class="stats-card professional-theme drilldown-tile ' . htmlspecialchars($extra_class, ENT_QUOTES) . '" data-color="' . htmlspecialchars($color, ENT_QUOTES) . '"' . $data_html . ' style="cursor:pointer;">
-                <div class="stats-card-icon professional-theme" data-color="' . htmlspecialchars($color, ENT_QUOTES) . '">
-                    <div class="stats-card-count-circle">' . (int)$count . '</div>
-                    <i class="' . htmlspecialchars($icon, ENT_QUOTES) . '"></i>
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <' . $tag . ' class="' . $classes . '"' . $attrs . $data_html . ' title="' . $label . '">
+                <div class="dd-tile-head">
+                    <span class="dd-tile-ico"><i class="' . htmlspecialchars($icon, ENT_QUOTES) . '"></i></span>
+                    <span class="dd-tile-name">' . $label . '</span>
+                    <i class="mdi mdi-chevron-right dd-tile-go"></i>
                 </div>
-                <div class="stats-card-content">
-                    <div class="stats-card-label" style="color:#fff;opacity:0.95;">' . htmlspecialchars((string)$label, ENT_QUOTES) . '</div>
-                    <div style="width:100%;margin-top:18px;">
-                        <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-                            <div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:' . $percentage . '%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-                        </div>
-                        <div class="stats-card-pct" style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">' . $percentage . '% ' . __('of_total_employees') . '</div>
-                    </div>
+                <div class="dd-tile-stat">
+                    <span class="dd-tile-count">' . (int)$count . '</span>
+                    <span class="dd-tile-unit">' . __('employees') . '</span>
                 </div>
-            </div>
+                <div class="dd-tile-bar"><span class="progress-bar-fill-animated" style="width:' . $percentage . '%;"></span></div>
+                <div class="dd-tile-pct"><b>' . $percentage . '%</b> ' . __('of_total_employees') . '</div>
+            </' . $tag . '>
         </div>';
     }
 }

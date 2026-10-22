@@ -88,8 +88,6 @@ foreach ($segments as $index => $segment) {
     }
 }
 
-$colorArr = ["primary", "success", "warning", "danger", "info", "dark"];
-
 // Employees can be left with no city/location assigned. Instead of silently dropping
 // them from the drilldown, every level that filters by an id that might be unset
 // (city, location) falls back to an "IS NULL OR = 0" match when the id is 0/unset,
@@ -125,7 +123,6 @@ if ($level === 'cities') {
     $stmt->close();
 
     $tiles_html = '';
-    $index = 0;
     foreach ($rows as $row) {
         $city_id_val = (int)$row['city_id'];
         $is_unlisted = $city_id_val <= 0;
@@ -137,14 +134,10 @@ if ($level === 'cities') {
             $row['cnt'],
             $label ?: ('City #' . $city_id_val),
             $is_unlisted ? 'mdi mdi-map-marker' : 'mdi mdi-city',
-            $is_unlisted ? 'dark' : $colorArr[$index % count($colorArr)],
             $percentage,
             ['next-level' => 'locations', 'company' => $company_id, 'company-name' => $company_name, 'city' => $city_id_val, 'city-name' => $label],
             $is_unlisted ? 'drilldown-tile-unassigned' : ''
         );
-        if (!$is_unlisted) {
-            $index++;
-        }
     }
     if ($tiles_html === '') {
         $tiles_html = '<div class="col-12"><div class="alert alert-warning mb-0">' . __('no_data_available_in_table') . '</div></div>';
@@ -177,7 +170,6 @@ if ($level === 'locations') {
     $stmt->close();
 
     $tiles_html = '';
-    $index = 0;
     foreach ($rows as $row) {
         $location_id_val = (int)$row['location_id'];
         $is_unlisted = $location_id_val <= 0;
@@ -189,14 +181,10 @@ if ($level === 'locations') {
             $row['cnt'],
             $label ?: ('Location #' . $location_id_val),
             $is_unlisted ? 'mdi mdi-map-marker' : 'mdi mdi-map-marker-outline',
-            $is_unlisted ? 'dark' : $colorArr[$index % count($colorArr)],
             $percentage,
             ['next-level' => 'departments', 'company' => $company_id, 'company-name' => $company_name, 'city' => $city_id, 'city-name' => $city_name, 'location' => $location_id_val, 'location-name' => $label],
             $is_unlisted ? 'drilldown-tile-unassigned' : ''
         );
-        if (!$is_unlisted) {
-            $index++;
-        }
     }
     if ($tiles_html === '') {
         $tiles_html = '<div class="col-12"><div class="alert alert-warning mb-0">' . __('no_data_available_in_table') . '</div></div>';
@@ -248,7 +236,6 @@ if ($level === 'departments') {
     }
 
     $tiles_html = '';
-    $index = 0;
     foreach ($rows as $row) {
         if ((int)$row['dept'] <= 0) {
             continue;
@@ -260,7 +247,6 @@ if ($level === 'departments') {
             $row['cnt'],
             $label ?: ('Department #' . $row['dept']),
             'fa fa-building',
-            $colorArr[$index % count($colorArr)],
             $percentage,
             [
                 'next-level' => $has_sub ? 'subdepts' : 'employees',
@@ -270,7 +256,6 @@ if ($level === 'departments') {
                 'dept' => $row['dept'], 'dept-name' => $label,
             ]
         );
-        $index++;
     }
     if ($tiles_html === '') {
         $tiles_html = '<div class="col-12"><div class="alert alert-warning mb-0">' . __('no_data_available_in_table') . '</div></div>';
@@ -324,7 +309,6 @@ if ($level === 'subdepts') {
     $total += $unassigned_count;
 
     $tiles_html = '';
-    $index = 0;
     foreach ($rows as $row) {
         if ((int)$row['sub_dept_id'] <= 0) {
             continue;
@@ -335,7 +319,6 @@ if ($level === 'subdepts') {
             $row['cnt'],
             $label ?: ('Sub-department #' . $row['sub_dept_id']),
             'mdi mdi-sitemap',
-            $colorArr[$index % count($colorArr)],
             $percentage,
             [
                 'next-level' => 'employees',
@@ -346,7 +329,6 @@ if ($level === 'subdepts') {
                 'subdept' => $row['sub_dept_id'], 'subdept-name' => $label,
             ]
         );
-        $index++;
     }
     if ($unassigned_count > 0) {
         $percentage = $total > 0 ? round(($unassigned_count / $total) * 100, 1) : 0;
@@ -354,7 +336,6 @@ if ($level === 'subdepts') {
             $unassigned_count,
             __('unassigned', 'Unassigned'),
             'mdi mdi-account-alert',
-            'dark',
             $percentage,
             [
                 'next-level' => 'employees',

@@ -5495,12 +5495,6 @@ function __(key, def) {
          * == and form fields; the handler actions/params are unchanged.
          * =================================================================
          */
-        const ORG_DEPT_COLORS = [
-            { v: 'custom', l: 'custom', hex: '#02c0ce' },
-            { v: 'purple', l: 'purple', hex: '#777edd' },
-            { v: 'primary', l: 'primary', hex: '#2d7bf4' },
-            { v: 'success', l: 'success', hex: '#0acf97' }
-        ];
         let citiesListCache = null;
         let departmentsListCache = null;
 
@@ -5539,11 +5533,6 @@ function __(key, def) {
                     </div>`;
         }
 
-        function orgColorPill(value) {
-            const c = ORG_DEPT_COLORS.find(x => x.v === String(value || '').trim().toLowerCase()) || ORG_DEPT_COLORS[0];
-            return `<span class="org-color"><span class="org-swatch" style="background:${c.hex}"></span>${escapeHtml(c.l)}</span>`;
-        }
-
         const ORG_CRUD = {
             departments: {
                 pane: 'group-departments', prefix: 'department', url: './includes/departments_handler.php',
@@ -5557,6 +5546,7 @@ function __(key, def) {
                 actions: { list: 'get_departments', get: 'get_department', add: 'add_department', update: 'update_department', del: 'delete_department' },
                 idParam: 'department_id', listKey: 'departments', getKey: 'department',
                 nameOf: r => r.dep_nme,
+                arOf: r => r.dep_nme_ar,
                 empty: __('no_departments_configured_yet', 'No departments configured yet'),
                 noMatch: __('no_departments_match_your_search', 'No departments match your search'),
                 msgs: {
@@ -5566,17 +5556,14 @@ function __(key, def) {
                     notFound: __('department_not_found', 'Department not found')
                 },
                 columns: [
-                    { label: __('department', 'Department'), cell: r => orgNameCell('mdi-domain', r.dep_nme, r.dep_nme_ar) },
-                    { label: __('department_color', 'Color'), cell: r => orgColorPill(r.dept_clr) }
+                    { label: __('department', 'Department'), cell: r => orgNameCell('mdi-domain', r.dep_nme, r.dep_nme_ar) }
                 ],
-                search: r => [r.dep_nme, r.dep_nme_ar, r.dept_clr],
+                search: r => [r.dep_nme, r.dep_nme_ar],
                 fields: [
                     { name: 'department_en', key: 'dep_nme', label: __('department_english', 'Department (English)'), ph: __('enter_department_in_english', 'Enter department in English'), col: 6,
                       msg: __('department_in_english_is_required', 'Department name in English is required') },
                     { name: 'department_ar', key: 'dep_nme_ar', label: __('department_arabic', 'Department (Arabic)'), ph: __('enter_department_in_arabic', 'Enter department in Arabic'), col: 6, rtl: true,
-                      msg: __('department_in_arabic_is_required', 'Department name in Arabic is required') },
-                    { name: 'department_color', key: 'dept_clr', label: __('department_color', 'Color'), type: 'swatch', col: 12, options: ORG_DEPT_COLORS,
-                      msg: __('invalid_department_color', 'Please select a valid department color') }
+                      msg: __('department_in_arabic_is_required', 'Department name in Arabic is required') }
                 ],
                 // Sub-Departments' department dropdown caches this list
                 onChange: () => { departmentsListCache = null; }
@@ -5593,6 +5580,7 @@ function __(key, def) {
                 actions: { list: 'get_sub_departments', get: 'get_sub_department', add: 'add_sub_department', update: 'update_sub_department', del: 'delete_sub_department' },
                 idParam: 'sub_dept_id', listKey: 'sub_departments', getKey: 'sub_department',
                 nameOf: r => r.name_en,
+                arOf: r => r.name_ar,
                 empty: __('no_sub_departments_configured_yet', 'No sub-departments configured yet.'),
                 noMatch: __('no_sub_departments_match_your_search', 'No sub-departments match your search'),
                 msgs: {
@@ -5603,7 +5591,7 @@ function __(key, def) {
                 },
                 columns: [
                     { label: __('sub_department', 'Sub-Department'), cell: r => orgNameCell('mdi-source-fork', r.name_en, r.name_ar) },
-                    { label: __('department_label'), cell: r => r.dep_nme ? `<span class="sr-chip"><i class="mdi mdi-domain"></i> ${escapeHtml(r.dep_nme)}</span>` : '<span class="ac-muted">-</span>' }
+                    { label: __('department_label'), icon: 'mdi-domain', cell: r => r.dep_nme ? `<span class="sr-chip"><i class="mdi mdi-domain"></i> ${escapeHtml(r.dep_nme)}</span>` : '<span class="ac-muted">-</span>' }
                 ],
                 search: r => [r.name_en, r.name_ar, r.dep_nme],
                 fields: [
@@ -5629,6 +5617,7 @@ function __(key, def) {
                 actions: { list: 'get_job_titles', get: 'get_job_title', add: 'add_job_title', update: 'update_job_title', del: 'delete_job_title' },
                 idParam: 'job_id', listKey: 'jobs', getKey: 'job',
                 nameOf: r => r.job,
+                arOf: r => r.job_ar,
                 empty: __('No job titles configured yet.'),
                 noMatch: __('no_job_titles_match_your_search'),
                 msgs: {
@@ -5639,7 +5628,7 @@ function __(key, def) {
                 },
                 columns: [
                     { label: __('job_title_english'), cell: r => orgNameCell('mdi-briefcase', r.job, '') },
-                    { label: __('job_title_arabic'), cell: r => r.job_ar ? `<span class="org-ar-cell" dir="rtl">${escapeHtml(r.job_ar)}</span>` : '<span class="ac-muted">N/A</span>' }
+                    { label: __('job_title_arabic'), tableOnly: true, cell: r => r.job_ar ? `<span class="org-ar-cell" dir="rtl">${escapeHtml(r.job_ar)}</span>` : '<span class="ac-muted">N/A</span>' }
                 ],
                 search: r => [r.job, r.job_ar],
                 fields: [
@@ -5661,6 +5650,7 @@ function __(key, def) {
                 actions: { list: 'get_locations', get: 'get_location', add: 'add_location', update: 'update_location', del: 'delete_location' },
                 idParam: 'location_id', listKey: 'locations', getKey: 'location',
                 nameOf: r => r.name_en,
+                arOf: r => r.name_ar,
                 empty: __('no_locations_configured_yet', 'No locations configured yet.'),
                 noMatch: __('no_locations_match_your_search', 'No locations match your search'),
                 msgs: {
@@ -5671,7 +5661,7 @@ function __(key, def) {
                 },
                 columns: [
                     { label: __('location', 'Location'), cell: r => orgNameCell('mdi-map-marker', r.name_en, r.name_ar) },
-                    { label: __('city'), cell: r => r.city_name_en ? `<span class="sr-chip"><i class="mdi mdi-city"></i> ${escapeHtml(r.city_name_en)}</span>` : '<span class="ac-muted">-</span>' }
+                    { label: __('city'), icon: 'mdi-city', cell: r => r.city_name_en ? `<span class="sr-chip"><i class="mdi mdi-city"></i> ${escapeHtml(r.city_name_en)}</span>` : '<span class="ac-muted">-</span>' }
                 ],
                 search: r => [r.name_en, r.name_ar, r.city_name_en],
                 fields: [
@@ -5699,6 +5689,7 @@ function __(key, def) {
                 actions: { list: 'get_companies', get: 'get_company', add: 'add_company', update: 'update_company', del: 'delete_company' },
                 idParam: 'company_id', listKey: 'companies', getKey: 'company',
                 nameOf: r => r.comp_name,
+                arOf: r => r.comp_name_ar,
                 empty: __('no_companies_configured_yet', 'No companies configured yet'),
                 noMatch: __('no_companies_match_your_search', 'No companies match your search'),
                 msgs: {
@@ -5710,8 +5701,8 @@ function __(key, def) {
                 onList: data => { companiesTimetablesCache = Array.isArray(data.timetables) ? data.timetables : []; },
                 columns: [
                     { label: __('company', 'Company'), cell: r => orgNameCell('mdi-office', r.comp_name, r.comp_name_ar) },
-                    { label: __('company_code', 'Company Code'), cell: r => `<span class="sr-chip sr-mono">${escapeHtml(String(r.comp_id ?? ''))}</span>` },
-                    { label: __('default_timetable', 'Default Timetable'), cell: r => r.timetable_name
+                    { label: __('company_code', 'Company Code'), icon: 'mdi-pound', cell: r => `<span class="sr-chip sr-mono">${escapeHtml(String(r.comp_id ?? ''))}</span>` },
+                    { label: __('default_timetable', 'Default Timetable'), icon: 'mdi-calendar-clock', cell: r => r.timetable_name
                         ? `<span class="sr-pill tone-sky"><i class="mdi mdi-calendar-clock"></i> ${escapeHtml(r.timetable_name)}</span>`
                         : `<span class="ac-muted">${__('none', 'None')}</span>` }
                 ],
@@ -5753,10 +5744,16 @@ function __(key, def) {
             let rules = [];
 
             hostEl.innerHTML = `
-                ${srTabHead('mdi-bell-ring', __('doc_expiry_alerts', 'Document Expiry Alerts'),
-                    __('doc_expiry_alerts_hint', 'Choose a document type, the users who should be told, and how many days before expiry the email goes out (e.g. 30, 14, 7). Emails are sent once a day as one summary per rule. Only these rules send document expiry emails - a document type with no active rule sends nothing.'),
-                    `<button type="button" id="der-run-btn" class="sr-btn sr-btn-ghost sr-btn-sm"><i class="mdi mdi-send"></i> ${__('send_due_alerts_now', 'Send Due Alerts Now')}</button>
-                     <button type="button" id="der-add-btn" class="sr-btn sr-btn-success sr-btn-sm"><i class="mdi mdi-plus"></i> ${__('add_notification_rule', 'Add Notification Rule')}</button>`)}
+                <div class="org-hero">
+                    <span class="org-hero-ico"><i class="mdi mdi-bell-ring"></i></span>
+                    <div class="org-hero-text">
+                        <h5 class="org-hero-title">${__('doc_expiry_alerts', 'Document Expiry Alerts')}</h5>
+                        <p class="org-hero-sub">${__('doc_expiry_alerts_hint', 'Choose a document type, the users who should be told, and how many days before expiry the email goes out (e.g. 30, 14, 7). Emails are sent once a day as one summary per rule. Only these rules send document expiry emails - a document type with no active rule sends nothing.')}</p>
+                    </div>
+                    <div class="org-hero-stat"><b id="der-count">-</b><span>${__('rules', 'Rules')}</span></div>
+                    <button type="button" id="der-run-btn" class="sr-btn sr-btn-ghost org-hero-add"><i class="mdi mdi-send"></i> ${__('send_due_alerts_now', 'Send Due Alerts Now')}</button>
+                    <button type="button" id="der-add-btn" class="sr-btn sr-btn-primary org-hero-add"><i class="mdi mdi-plus"></i> ${__('add_notification_rule', 'Add Notification Rule')}</button>
+                </div>
                 <div class="sr-card aca-card">
                     <div id="der-list"><div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div></div>
                 </div>`;
@@ -5779,6 +5776,8 @@ function __(key, def) {
                 Promise.all([loadOptions(), api({ action: 'list' })]).then(([, data]) => {
                     if (!data.success) throw new Error(data.message || __('failed_to_load', 'Failed to load.'));
                     rules = data.rules || [];
+                    const countEl = hostEl.querySelector('#der-count');
+                    if (countEl) countEl.textContent = rules.length;
                     if (!rules.length) {
                         listEl.innerHTML = `<div class="sr-empty"><i class="mdi mdi-bell-ring"></i>${__('no_doc_expiry_rules', 'No notification rules yet. Add one to start sending document expiry emails.')}</div>`;
                         return;
@@ -6052,29 +6051,43 @@ function __(key, def) {
             });
         }
 
+        // Grid (cards) or list (table) - one choice shared by every Org Structure sub-tab
+        const ORG_VIEW_KEY = 'org_crud_view';
+        function getOrgView() {
+            try { return localStorage.getItem(ORG_VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) { return 'grid'; }
+        }
+
         function renderOrgCrud(cfg, hostEl) {
             hostEl = hostEl || settingsContainer;
             const p = cfg.prefix;
+            const view = getOrgView();
             hostEl.innerHTML = `
                 <div class="tab-pane active" id="${cfg.pane}" role="tabpanel">
-                    <div class="ac-head">
-                        <div>
-                            <h5 class="ac-title"><i class="mdi ${cfg.icon}"></i> ${escapeHtml(cfg.title)}</h5>
-                            <p class="ac-sub">${escapeHtml(cfg.sub)}</p>
+                    <div class="org-hero">
+                        <span class="org-hero-ico"><i class="mdi ${cfg.icon}"></i></span>
+                        <div class="org-hero-text">
+                            <h5 class="org-hero-title">${escapeHtml(cfg.title)}</h5>
+                            <p class="org-hero-sub">${escapeHtml(cfg.sub)}</p>
                         </div>
-                        <div class="ac-head-actions">
-                            <button type="button" class="sr-btn sr-btn-success sr-btn-sm" id="btn-add-${p}"><i class="mdi mdi-plus"></i> ${escapeHtml(cfg.addLabel)}</button>
+                        <div class="org-hero-stat">
+                            <b id="${p}-count">-</b>
+                            <span>${__('total', 'Total')}</span>
                         </div>
+                        <button type="button" class="sr-btn sr-btn-primary org-hero-add" id="btn-add-${p}"><i class="mdi mdi-plus"></i> ${escapeHtml(cfg.addLabel)}</button>
                     </div>
-                    <div class="sr-card aca-card">
+                    <div class="sr-card aca-card org-panel">
                         <div class="sr-toolbar">
                             <div class="sr-search">
                                 <i class="mdi mdi-magnify"></i>
                                 <input type="search" id="${p}-search-input" placeholder="${escapeHtml(cfg.searchPh)}" autocomplete="off" aria-label="${__('search')}">
                             </div>
-                            <span class="sr-chip" id="${p}-count-chip"><i class="mdi mdi-format-list-bulleted"></i> <span id="${p}-count">-</span></span>
+                            <span class="sr-chip org-shown-chip" id="${p}-shown-chip" style="display:none"></span>
+                            <div class="org-view-toggle" role="group" aria-label="${__('view', 'View')}">
+                                <button type="button" data-view="grid" class="${view === 'grid' ? 'active' : ''}" title="${__('grid_view', 'Grid view')}" aria-pressed="${view === 'grid'}"><i class="mdi mdi-view-grid"></i></button>
+                                <button type="button" data-view="list" class="${view === 'list' ? 'active' : ''}" title="${__('list_view', 'List view')}" aria-pressed="${view === 'list'}"><i class="mdi mdi-view-list"></i></button>
+                            </div>
                         </div>
-                        <div id="${p}-container">
+                        <div id="${p}-container" class="org-body">
                             <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                         </div>
                     </div>
@@ -6087,6 +6100,17 @@ function __(key, def) {
             searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
             searchInput.addEventListener('input', () => filterOrgRows(cfg));
 
+            hostEl.querySelectorAll('.org-view-toggle button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    try { localStorage.setItem(ORG_VIEW_KEY, btn.dataset.view); } catch (e) {}
+                    hostEl.querySelectorAll('.org-view-toggle button').forEach(b => {
+                        b.classList.toggle('active', b === btn);
+                        b.setAttribute('aria-pressed', b === btn);
+                    });
+                    if (cfg._rows) renderOrgRows(cfg);
+                });
+            });
+
             loadOrgRows(cfg);
         }
 
@@ -6097,48 +6121,80 @@ function __(key, def) {
             try {
                 const data = await orgPost(cfg, { action: cfg.actions.list });
                 if (cfg.onList) cfg.onList(data);
-                const rows = (data.success && Array.isArray(data[cfg.listKey])) ? data[cfg.listKey] : [];
+                cfg._rows = (data.success && Array.isArray(data[cfg.listKey])) ? data[cfg.listKey] : [];
                 const countEl = document.getElementById(`${p}-count`);
-                if (countEl) countEl.textContent = rows.length;
-
-                if (rows.length === 0) {
-                    container.innerHTML = `<div class="sr-empty"><i class="mdi ${cfg.icon}"></i>${escapeHtml(cfg.empty)}</div>`;
-                    return;
-                }
-
-                let body = '';
-                rows.forEach(r => {
-                    const search = cfg.search(r).filter(v => v != null).join(' ').toLowerCase();
-                    body += `<tr data-search="${escapeHtml(search)}">
-                        ${cfg.columns.map(c => `<td>${c.cell(r)}</td>`).join('')}
-                        <td class="aca-actions">
-                            <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon org-edit-btn" data-id="${escapeHtml(r.id)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
-                            <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove org-delete-btn" data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(cfg.nameOf(r) || '')}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>
-                        </td>
-                    </tr>`;
-                });
-
-                container.innerHTML = `
-                    <div class="sr-table-wrap aca-table-wrap">
-                        <table class="sr-table aca-table org-table">
-                            <thead><tr>${cfg.columns.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')}<th class="aca-actions">${__('actions')}</th></tr></thead>
-                            <tbody>${body}</tbody>
-                        </table>
-                    </div>
-                    <div class="sr-empty org-no-results" style="display:none"><i class="mdi mdi-magnify"></i>${escapeHtml(cfg.noMatch)}</div>`;
-
-                container.querySelectorAll('.org-edit-btn').forEach(btn => {
-                    btn.addEventListener('click', () => editOrgRow(cfg, btn.dataset.id));
-                });
-                container.querySelectorAll('.org-delete-btn').forEach(btn => {
-                    btn.addEventListener('click', () => deleteOrgRow(cfg, btn.dataset.id, btn.dataset.name));
-                });
-
-                filterOrgRows(cfg);
+                if (countEl) countEl.textContent = cfg._rows.length;
+                renderOrgRows(cfg);
             } catch (error) {
                 console.error(`Error loading ${cfg.listKey}:`, error);
                 container.innerHTML = `<div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(error.message)}</div></div>`;
             }
+        }
+
+        function renderOrgRows(cfg) {
+            const p = cfg.prefix;
+            const container = document.getElementById(`${p}-container`);
+            if (!container) return;
+            const rows = cfg._rows || [];
+
+            if (rows.length === 0) {
+                container.innerHTML = `<div class="sr-empty org-empty">
+                        <i class="mdi ${cfg.icon}"></i>${escapeHtml(cfg.empty)}
+                        <button type="button" class="sr-btn sr-btn-primary sr-btn-sm org-empty-add"><i class="mdi mdi-plus"></i> ${escapeHtml(cfg.addLabel)}</button>
+                    </div>`;
+                container.querySelector('.org-empty-add').addEventListener('click', () => openOrgForm(cfg, null));
+                return;
+            }
+
+            const searchOf = r => escapeHtml(cfg.search(r).filter(v => v != null).join(' ').toLowerCase());
+            const actionsHtml = r => `
+                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon org-edit-btn" data-id="${escapeHtml(r.id)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove org-delete-btn" data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(cfg.nameOf(r) || '')}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>`;
+            const noMatch = `<div class="sr-empty org-no-results" style="display:none"><i class="mdi mdi-magnify"></i>${escapeHtml(cfg.noMatch)}</div>`;
+
+            if (getOrgView() === 'list') {
+                const body = rows.map(r => `<tr data-search="${searchOf(r)}">
+                        ${cfg.columns.map(c => `<td>${c.cell(r)}</td>`).join('')}
+                        <td class="aca-actions">${actionsHtml(r)}</td>
+                    </tr>`).join('');
+                container.innerHTML = `
+                    <div class="sr-table-wrap aca-table-wrap org-results">
+                        <table class="sr-table aca-table org-table">
+                            <thead><tr>${cfg.columns.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')}<th class="aca-actions">${__('actions')}</th></tr></thead>
+                            <tbody>${body}</tbody>
+                        </table>
+                    </div>${noMatch}`;
+            } else {
+                // Card = name (EN + AR) + every non-name column as a labelled meta line
+                const metaCols = cfg.columns.slice(1).filter(c => !c.tableOnly);
+                const cards = rows.map(r => {
+                    const en = cfg.nameOf(r);
+                    const ar = cfg.arOf ? cfg.arOf(r) : '';
+                    return `<div class="org-card" data-search="${searchOf(r)}">
+                        <div class="org-card-head">
+                            <span class="org-card-ico"><i class="mdi ${cfg.icon}"></i></span>
+                            <div class="org-card-names">
+                                <span class="org-card-en" title="${escapeHtml(en || '')}">${escapeHtml(en || 'N/A')}</span>
+                                ${ar ? `<span class="org-card-ar" dir="rtl" title="${escapeHtml(ar)}">${escapeHtml(ar)}</span>` : `<span class="org-card-ar is-missing">${__('no_arabic_name', 'No Arabic name')}</span>`}
+                            </div>
+                            <div class="org-card-actions">${actionsHtml(r)}</div>
+                        </div>
+                        ${metaCols.length ? `<dl class="org-card-meta">
+                            ${metaCols.map(c => `<div><dt>${c.icon ? `<i class="mdi ${c.icon}"></i>` : ''}${escapeHtml(c.label)}</dt><dd>${c.cell(r)}</dd></div>`).join('')}
+                        </dl>` : ''}
+                    </div>`;
+                }).join('');
+                container.innerHTML = `<div class="org-grid org-results">${cards}</div>${noMatch}`;
+            }
+
+            container.querySelectorAll('.org-edit-btn').forEach(btn => {
+                btn.addEventListener('click', () => editOrgRow(cfg, btn.dataset.id));
+            });
+            container.querySelectorAll('.org-delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => deleteOrgRow(cfg, btn.dataset.id, btn.dataset.name));
+            });
+
+            filterOrgRows(cfg);
         }
 
         function filterOrgRows(cfg) {
@@ -6147,16 +6203,22 @@ function __(key, def) {
             const input = document.getElementById(`${p}-search-input`);
             if (!container || !input) return;
             const q = input.value.trim().toLowerCase();
+            const items = container.querySelectorAll('tbody tr, .org-card');
             let shown = 0;
-            container.querySelectorAll('tbody tr').forEach(tr => {
-                const hit = !q || tr.dataset.search.includes(q);
-                tr.style.display = hit ? '' : 'none';
+            items.forEach(el => {
+                const hit = !q || el.dataset.search.includes(q);
+                el.style.display = hit ? '' : 'none';
                 if (hit) shown++;
             });
             const noRes = container.querySelector('.org-no-results');
-            const wrap = container.querySelector('.aca-table-wrap');
+            const wrap = container.querySelector('.org-results');
             if (noRes) noRes.style.display = shown ? 'none' : '';
             if (wrap) wrap.style.display = shown ? '' : 'none';
+            const chip = document.getElementById(`${p}-shown-chip`);
+            if (chip) {
+                chip.style.display = q ? '' : 'none';
+                chip.innerHTML = `<i class="mdi mdi-filter"></i> ${shown} / ${items.length}`;
+            }
         }
 
         async function editOrgRow(cfg, id) {
@@ -6186,12 +6248,8 @@ function __(key, def) {
             }
 
             const valueOf = f => {
-                if (!record) return f.type === 'swatch' ? f.options[0].v : '';
+                if (!record) return '';
                 const v = record[f.key];
-                if (f.type === 'swatch') {
-                    const norm = String(v || '').trim().toLowerCase();
-                    return f.options.some(o => o.v === norm) ? norm : f.options[0].v;
-                }
                 return v == null ? '' : String(v);
             };
 
@@ -6204,13 +6262,6 @@ function __(key, def) {
                         <option value="">${escapeHtml(f.placeholder || __('select', 'Select'))}</option>
                         ${optionLists[f.name].map(o => `<option value="${escapeHtml(o.v)}"${String(o.v) === val ? ' selected' : ''}>${escapeHtml(o.l)}</option>`).join('')}
                     </select>`;
-                } else if (f.type === 'swatch') {
-                    control = `<div class="org-swatches" id="${fid(f)}">
-                        ${f.options.map(o => `<label class="org-swatch-opt">
-                            <input type="radio" name="${fid(f)}" value="${o.v}"${o.v === val ? ' checked' : ''}>
-                            <span><span class="org-swatch" style="background:${o.hex}"></span>${escapeHtml(o.l)}</span>
-                        </label>`).join('')}
-                    </div>`;
                 } else {
                     control = `<input type="${f.type === 'number' ? 'number' : 'text'}" id="${fid(f)}" class="form-control${f.mono ? ' sr-mono' : ''}"${f.type === 'number' ? ' min="1"' : ''}${f.rtl ? ' dir="rtl"' : ''}
                         autocomplete="off" value="${escapeHtml(val)}" placeholder="${escapeHtml(f.ph || '')}">`;
@@ -6247,19 +6298,13 @@ function __(key, def) {
                     const params = { action: isEdit ? cfg.actions.update : cfg.actions.add };
                     if (isEdit) params[cfg.idParam] = id;
                     for (const f of cfg.fields) {
-                        let v;
-                        if (f.type === 'swatch') {
-                            const checked = document.querySelector(`input[name="${fid(f)}"]:checked`);
-                            v = checked ? checked.value : '';
-                        } else {
-                            v = document.getElementById(fid(f)).value.trim();
-                        }
+                        const v = document.getElementById(fid(f)).value.trim();
                         const bad = (!f.optional && !v) || (v && f.check && !f.check(v));
                         if (bad) {
                             const el = document.getElementById(fid(f));
                             if (f.type === 'select') $(el).next('.select2-container').addClass('is-invalid');
                             else el.classList.add('is-invalid');
-                            if (f.type !== 'select' && f.type !== 'swatch') el.focus();
+                            if (f.type !== 'select') el.focus();
                             Swal.showValidationMessage(f.msg);
                             return false;
                         }
