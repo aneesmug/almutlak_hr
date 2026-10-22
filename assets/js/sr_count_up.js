@@ -13,6 +13,9 @@
  * - The real number stays in the DOM as visually-hidden text, so screen readers, copy,
  *   textContent and the Arabic-digit pass still see "1,234".
  *
+ * - Stat cards (CARD_SELECTOR) slide up + fade in one after another; the numbers and bars
+ *   inside each card start together with their card. Opt in other cards with data-rise.
+ *
  * Opt in any other element: add attribute data-count-up.
  * Opt out: add class "no-count-up" or attribute data-no-count-up.
  */
@@ -30,10 +33,20 @@
         '.ve-loan-stat-value', '.payroll-import-result-stat-value', '.stats-card-count', '.summary-value',
         // Employee master: header quick stats (includes/emp_top_info.php) + salary card (view_employee.php)
         '.eh-stat b', '.sal-total > b', '.sal-item-text b', '.sal-item-pct',
-        '.stats-card-count-circle', '.stats-card-pct', '.dx-count', '.dx-doc-num', '.dash-scope-count', '.dex-stat-sub b',
+        '.stats-card-count-circle', '.stats-card-pct', '.dx-count', '.dx-doc-num', '.dash-scope-count', '.dex-stat-sub b', '.vac-sum-tile b', '.vac-sum-bar-head > span:last-child',
         '.et-stat b', '.et-next-head > span', '.et-next-head > b', '.et-eos b'
     ].join(',');
     var SKIP = '.no-count-up, [data-no-count-up]';
+    // Stat cards slide up + fade in one after another when they come into view.
+    var CARD_SELECTOR = [
+        '[data-rise]',
+        '.dash-kpi', '.sr-stat', '.sr-tile', '.sr-scard', '.stats-card', '.doc-expiry-card', '.dash-scope-item',
+        '.dex-stat', '.eh-stat', '.sal-total', '.sal-item', '.et-stat', '.et-eos',
+        // view_employee.php: vacation summary, loan stats/boxes, document list
+        '.vac-sum-tile', '.vac-sum-bar', '.ve-loan-stat', '.ve-loan-box', '.doc-item'
+    ].join(',');
+    var RISE_STAGGER = 80;   // ms between cards
+    var RISE_MAX_DELAY = 800;
     // Progress bars on every page grow from 0 to their inline width when they come into view.
     // A bar = thin element with an inline width in % whose own or parent class names a
     // bar / progress / track / meter / gauge (dash-kpi-bar, et-bar, sal-bar, srh-progress,
@@ -71,7 +84,10 @@
             + '.sr-odo-s::before{content:"' + lat + '"}'
             + '.sr-odo.is-ar .sr-odo-s::before{content:"' + ar + '"}'
             + '.sr-odo-c{display:inline-block;height:1.2em;line-height:1.2em}'
-            + '.sr-odo-c::before{content:attr(data-c)}';
+            + '.sr-odo-c::before{content:attr(data-c)}'
+            + '.sr-rise{opacity:0;transform:translateY(18px)}'
+            + '.sr-rise.sr-rise-in{animation:srRise .6s cubic-bezier(.22,.9,.3,1) both}'
+            + '@keyframes srRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}';
         var style = document.createElement('style');
         style.id = 'sr-count-up-css';
         style.appendChild(document.createTextNode(css));
@@ -227,14 +243,47 @@
         setTimeout(function () { st.busy = false; }, 0);
     }
 
+    // Numbers / bars inside a card that is still sliding in start with that card.
+    function riseDelayOf(el) {
+        var card = el.closest('.sr-rise');
+        return (card && card.__riseDelay) || 0;
+    }
+
     function onVisible(el) {
         var st = el.__countUp;
         if (st) {
             st.seen = true;
-            if (st.roll) { rollSoon(st.roll); st.roll = null; }
+            if (st.roll) {
+                var roll = st.roll;
+                st.roll = null;
+                setTimeout(function () { rollSoon(roll); }, riseDelayOf(el));
+            }
         } else if (el.__countBar != null) {
             growBar(el);
         }
+    }
+
+    function riseCard(card, delay) {
+        card.__riseDelay = delay;
+        card.style.animationDelay = delay + 'ms';
+        card.classList.add('sr-rise-in');
+        card.addEventListener('animationend', function done(e) {
+            if (e.target !== card) return;
+            card.removeEventListener('animationend', done);
+            // Drop the classes so the card's own hover transform works again.
+            card.classList.remove('sr-rise', 'sr-rise-in');
+            card.style.animationDelay = '';
+            card.__riseDelay = 0;
+        });
+    }
+
+    // One IntersectionObserver batch: cards first (in page order, staggered), then the
+    // numbers and bars, which pick up their card's delay.
+    function onVisibleBatch(list) {
+        var cards = list.filter(function (el) { return el.__rise; });
+        cards.sort(function (a, b) { return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1; });
+        cards.forEach(function (card, i) { riseCard(card, Math.min(i * RISE_STAGGER, RISE_MAX_DELAY)); });
+        list.forEach(function (el) { if (!el.__rise) onVisible(el); });
     }
 
     // The skeleton loader (sr_skeleton.js) keeps the content visibility:hidden while the page
@@ -243,18 +292,20 @@
     function flushWaiting() {
         var list = waiting;
         waiting = [];
-        list.forEach(onVisible);
+        onVisibleBatch(list);
     }
     window.addEventListener('sr:skeleton-done', flushWaiting);
     setTimeout(flushWaiting, 6500); // matches the skeleton's CSS fail-safe
 
     var io = window.IntersectionObserver ? new IntersectionObserver(function (entries) {
+        var batch = [];
         entries.forEach(function (e) {
             if (!e.isIntersecting) return;
             io.unobserve(e.target);
-            if (document.documentElement.classList.contains('sr-sk-on')) waiting.push(e.target);
-            else onVisible(e.target);
+            batch.push(e.target);
         });
+        if (document.documentElement.classList.contains('sr-sk-on')) Array.prototype.push.apply(waiting, batch);
+        else onVisibleBatch(batch);
     }) : null;
 
     // First sight of a tile, or its text changed (AJAX fill, Arabic digit pass).
@@ -298,11 +349,18 @@
     function growBar(bar) {
         // Page JS changed the width meanwhile (live progress) - leave it alone.
         if (bar.style.width !== '0px' && bar.style.width !== '0') return restoreBar(bar);
-        var idx = Array.prototype.indexOf.call(bar.parentNode.children, bar);
+        var delay = Array.prototype.indexOf.call(bar.parentNode.children, bar) * BAR_STAGGER + riseDelayOf(bar);
         void bar.offsetWidth;
-        bar.style.transition = 'width ' + BAR_DURATION + 'ms cubic-bezier(.22,.9,.3,1) ' + (idx * BAR_STAGGER) + 'ms';
+        bar.style.transition = 'width ' + BAR_DURATION + 'ms cubic-bezier(.22,.9,.3,1) ' + delay + 'ms';
         bar.style.width = bar.__countBar;
-        setTimeout(function () { restoreBar(bar); }, BAR_DURATION + idx * BAR_STAGGER + 50);
+        setTimeout(function () { restoreBar(bar); }, BAR_DURATION + delay + 50);
+    }
+
+    function initCard(card) {
+        if (card.__rise || !io || card.closest(SKIP)) return;
+        card.__rise = true;
+        card.classList.add('sr-rise');
+        io.observe(card);
     }
 
     function restoreBar(bar) {
@@ -311,6 +369,8 @@
 
     function scan(root) {
         if (root.nodeType !== 1) return;
+        if (root.matches(CARD_SELECTOR)) initCard(root);
+        Array.prototype.forEach.call(root.querySelectorAll(CARD_SELECTOR), initCard);
         if (root.matches(SELECTOR)) handle(root);
         if (root.matches(BAR_SELECTOR)) initBar(root);
         Array.prototype.forEach.call(root.querySelectorAll(SELECTOR), handle);
