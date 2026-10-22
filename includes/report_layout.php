@@ -271,6 +271,27 @@ if (!function_exists('report_toggle_button_html')) {
     }
 }
 
+/**
+ * Compact status panel (e.g. Vacation Salary / Payroll Information): icon + title + one-line message, facts as a strip.
+ * $tone: info | success | warning | danger. $facts: [label => value HTML]. $foot: optional extra note (HTML), added to the message.
+ */
+if (!function_exists('report_notice_html')) {
+    function report_notice_html(string $tone, string $icon, string $title, string $message, array $facts = [], string $foot = ''): string
+    {
+        $html = '<div class="rpt-notice is-' . htmlspecialchars($tone, ENT_QUOTES, 'UTF-8') . '">'
+            . '<div class="rpt-notice-head"><span class="rpt-notice-ic"><i class="' . htmlspecialchars($icon, ENT_QUOTES, 'UTF-8') . '"></i></span>'
+            . '<div class="rpt-notice-text"><b>' . $title . '</b>' . ($message . $foot !== '' ? '<p>' . trim($message . ' ' . $foot) . '</p>' : '') . '</div></div>';
+        if ($facts) {
+            $html .= '<dl class="rpt-notice-facts">';
+            foreach ($facts as $label => $value) {
+                $html .= '<div><dt>' . $label . '</dt><dd>' . $value . '</dd></div>';
+            }
+            $html .= '</dl>';
+        }
+        return $html . '</div>';
+    }
+}
+
 /** App scripts + the chain / section toggles. $o: extra_scripts (HTML after the app scripts). */
 if (!function_exists('report_scripts_html')) {
     function report_scripts_html(array $o): string

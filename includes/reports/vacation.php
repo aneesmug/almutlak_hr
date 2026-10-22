@@ -890,18 +890,21 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                     <?php endif; ?>
                                 
-                                <?php if ($vacation_salary_type === 'end_of_service' && $meets_min_days_for_salary_choice): ?>
+                                <?php
+                                    // Vacation salary + payroll panels: side by side when both show (keeps the report short)
+                                    $show_salary_eos_info = $vacation_salary_type === 'end_of_service' && $meets_min_days_for_salary_choice;
+                                    $show_payroll_info = ($is_local_annual || $is_local_annual_removed_from_payroll) && (empty($isEmployee) || $isEmployee === false);
+                                    $pair_info_panels = $show_salary_eos_info && $show_payroll_info;
+                                ?>
+                                <?php if ($pair_info_panels): ?><div class="rpt-cols"><?php endif; ?>
+                                <?php if ($show_salary_eos_info): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-info-circle"></i><?= __('vacation_salary_information') ?></h5>
-                                    <div class="alert alert-info mb-0">
-                                        <i class="fa fa-piggy-bank"></i> <strong><?= __('vacation_salary_deferred_eos') ?></strong>
-                                        <p class="mb-2 mt-2"><?= str_replace('{days}', htmlspecialchars($applied_days), __('employee_chosen_receive_vacation_salary_eos')) ?></p>
-                                        <ul class="mb-0 pl-4">
-                                            <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?></strong></li>
-                                            <li><?= __('payment') ?>: <strong><?= __('end_of_service_settlement') ?></strong></li>
-                                            <li><?= __('amount_calculated_added_final_settlement') ?></li>
-                                        </ul>
-                                    </div>
+                                    <?= report_notice_html('info', 'fa fa-piggy-bank', __('vacation_salary_deferred_eos'),
+                                        str_replace('{days}', htmlspecialchars($applied_days), __('employee_chosen_receive_vacation_salary_eos')), [
+                                        __('vacation_days') => htmlspecialchars($applied_days) . ' ' . __('day_s'),
+                                        __('payment')       => __('end_of_service_settlement'),
+                                    ]) ?>
                                 </div>
                                 <?php endif; ?>
                                 
@@ -909,45 +912,35 @@ if (mysqli_num_rows($query) == 1) {
                                     if ($is_local_annual && !$is_local_annual_removed_from_payroll && (empty($isEmployee) || $isEmployee === false)): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-briefcase"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
-                                    <div class="alert alert-success mb-0">
-                                        <i class="fa fa-check-circle"></i> <strong><?= __('employee_active_in_payroll') ?? 'Employee Active in Payroll' ?></strong>
-                                        <p class="mb-2 mt-2"><?= __('local_annual_vacation_payroll_message') ?? 'This is a Local Annual vacation. The employee will remain active in the payroll system and receive their complete monthly salary as per normal.' ?></p>
-                                        <ul class="mb-0 pl-4">
-                                            <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
-                                            <li><?= __('payroll_status') ?>: <strong><?= __('active_full_salary') ?? 'Active - Full Salary' ?></strong></li>
-                                            <li><?= __('vacation_days_deducted') ?? 'Vacation Days Deducted' ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
-                                            <li><?= __('salary_deduction') ?? 'Salary Deduction' ?>: <strong><?= __('none') ?? 'None' ?></strong></li>
-                                        </ul>
-                                    </div>
+                                    <?= report_notice_html('success', 'fa fa-check-circle', __('employee_active_in_payroll') ?? 'Employee Active in Payroll',
+                                        __('local_annual_vacation_payroll_message') ?? 'This is a Local Annual vacation. The employee will remain active in the payroll system and receive their complete monthly salary as per normal.', [
+                                        __('vacation_type')  => getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']),
+                                        __('payroll_status') => __('active_full_salary') ?? 'Active - Full Salary',
+                                        __('vacation_days_deducted') ?? 'Vacation Days Deducted' => htmlspecialchars($applied_days) . ' ' . (__('day_s') ?? 'Days'),
+                                        __('salary_deduction') ?? 'Salary Deduction' => __('none') ?? 'None',
+                                    ]) ?>
                                 </div>
                                 <?php endif; ?>
 
                                 <?php if ($is_local_annual_removed_from_payroll && (empty($isEmployee) || $isEmployee === false)): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-user-minus"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
-                                    <div class="alert alert-warning mb-0">
-                                        <i class="fa fa-exclamation-circle"></i>
-                                        <strong><?= __('employee_removed_from_active_payroll') ?? 'Employee Removed from Active Payroll' ?></strong>
-                                        <p class="mb-2 mt-2"><?= __('local_annual_saudi_long_leave_payroll_message') ?? ('This is a Saudi Local Annual vacation with Vacation Salary Payment set to Yes and vacation days above ' . (int)$local_annual_min_days_exclusive . '. The employee is removed from active payroll for this period.') ?></p>
-                                        <ul class="mb-0 pl-4">
-                                            <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
-                                            <li><?= __('payroll_status') ?>: <strong><?= __('removed_from_active_payroll') ?? 'Removed from Active Payroll' ?></strong></li>
-                                            <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
-                                            <li><?= __('country') ?? 'Country' ?>: <strong><?= (((int)($request['country_id'] ?? 0) === 191) ? __('saudi_arabia', 'Saudi Arabia') : getDisplayName($request['country_name'] ?? null)); ?></strong></li>
-                                        </ul>
-                                        <?php
-                                            $used_below_min_days_override = $allow_vacation_salary_below_min_days && (
-                                                $approved_days < $local_annual_min_days_exclusive
-                                                || (int)($request['country_id'] ?? 0) !== 191
-                                            );
-                                        ?>
-                                        <?php if ($used_below_min_days_override): ?>
-                                        <hr>
-                                        <p class="mb-0"><i class="fa fa-info-circle"></i> <?= __('vacation_salary_below_min_days_override_note') ?? ('This employee is individually authorized (Employee Master) to receive the vacation salary payout regardless of nationality and even though the approved days are below the normal ' . (int)$local_annual_min_days_exclusive . '-day minimum.') ?></p>
-                                        <?php endif; ?>
-                                    </div>
+                                    <?php
+                                        $used_below_min_days_override = $allow_vacation_salary_below_min_days && (
+                                            $approved_days < $local_annual_min_days_exclusive
+                                            || (int)($request['country_id'] ?? 0) !== 191
+                                        );
+                                    ?>
+                                    <?= report_notice_html('warning', 'fa fa-user-minus', __('employee_removed_from_active_payroll') ?? 'Employee Removed from Active Payroll',
+                                        __('local_annual_saudi_long_leave_payroll_message') ?? ('This is a Saudi Local Annual vacation with Vacation Salary Payment set to Yes and vacation days above ' . (int)$local_annual_min_days_exclusive . '. The employee is removed from active payroll for this period.'), [
+                                        __('vacation_type')  => getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']),
+                                        __('payroll_status') => __('removed_from_active_payroll') ?? 'Removed from Active Payroll',
+                                        __('vacation_days')  => htmlspecialchars($applied_days) . ' ' . (__('day_s') ?? 'Days'),
+                                        __('country') ?? 'Country' => (((int)($request['country_id'] ?? 0) === 191) ? __('saudi_arabia', 'Saudi Arabia') : getDisplayName($request['country_name'] ?? null)),
+                                    ], $used_below_min_days_override ? (__('vacation_salary_below_min_days_override_note') ?? ('This employee is individually authorized (Employee Master) to receive the vacation salary payout regardless of nationality and even though the approved days are below the normal ' . (int)$local_annual_min_days_exclusive . '-day minimum.')) : '') ?>
                                 </div>
                                 <?php endif; ?>
+                                <?php if ($pair_info_panels): ?></div><?php endif; ?>
 
                                 <?php if (((($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') || $is_emergency): ?>
                                 <div class="report-section">

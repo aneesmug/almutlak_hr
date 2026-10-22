@@ -130,6 +130,26 @@ html.app-dark .more-actions-modal { --ma-bg: #1b1f27; --ma-card: #242a35; --ma-b
 .rpt .alert li { position: relative; padding-inline-start: 10px; }
 .rpt .alert li::before { content: ""; position: absolute; inset-inline-start: 0; top: .6em; width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .6; }
 
+/* status panel (report_notice_html): tone stripe, icon + title + message, facts strip */
+.rpt-notice { --n: #2563eb; --n-soft: #eff6ff; --n-line: #dbeafe; border: 1px solid var(--rpt-line); border-inline-start: 4px solid var(--n); border-radius: 8px; background: #fff; overflow: hidden; }
+.rpt-notice.is-success { --n: #059669; --n-soft: #ecfdf5; --n-line: #d1fae5; }
+.rpt-notice.is-warning { --n: #d97706; --n-soft: #fffbeb; --n-line: #fde68a; }
+.rpt-notice.is-danger  { --n: #dc2626; --n-soft: #fef2f2; --n-line: #fecaca; }
+.rpt-notice-head { display: flex; align-items: flex-start; gap: 10px; padding: 7px 12px; background: var(--n-soft); }
+.rpt-notice-ic { flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; background: var(--n); }
+.rpt-notice-text { min-width: 0; line-height: 1.35; }
+.rpt-notice-text b { display: block; font-size: 12.5px; font-weight: 800; color: var(--n); }
+.rpt-notice-text p { margin: 1px 0 0; font-size: 11.5px; color: var(--rpt-muted); }
+.rpt-notice-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 4px 14px; margin: 0; padding: 6px 12px; border-top: 1px solid var(--n-line); }
+.rpt-notice-facts > div { min-width: 0; }
+.rpt-notice-facts dt { margin: 0; font-size: 9.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--rpt-muted); }
+.rpt-notice-facts dd { margin: 0; font-size: 12.5px; font-weight: 700; line-height: 1.3; color: var(--rpt-ink); }
+
+/* paired panels (vacation salary + payroll) get equal height, facts on the bottom line */
+.rpt-cols > .report-section:has(> .rpt-notice) { display: flex; flex-direction: column; }
+.rpt-cols > .report-section > .rpt-notice { flex: 1; display: flex; flex-direction: column; }
+.rpt-cols .rpt-notice-head { flex: 1; }
+
 /* two side-by-side sections */
 .rpt-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
 
@@ -174,7 +194,8 @@ html.app-dark .rpt-bar, html.app-dark .rpt-btn, html.app-dark .rpt-inline-btn { 
 html.app-dark .rpt-bar-title b { color: #e5e7eb; }
 html.app-dark .rpt-btn-primary { background: #2563eb; border-color: #2563eb; color: #fff !important; }
 html.app-dark .rpt .payment-summary, html.app-dark .rpt .notes-section, html.app-dark .rpt .info-box, html.app-dark .rpt .alert,
-html.app-dark .rpt .vr-step-card, html.app-dark .rpt .vr-badge, html.app-dark .rpt .vr-flow-notice { background: #161b25; }
+html.app-dark .rpt .vr-step-card, html.app-dark .rpt .vr-badge, html.app-dark .rpt .vr-flow-notice, html.app-dark .rpt-notice { background: #161b25; }
+html.app-dark .rpt-notice { --n-soft: rgba(255, 255, 255, .04); --n-line: #2a3140; }
 
 /* ---------- print (A4) ---------- */
 @media print {
