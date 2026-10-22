@@ -47,7 +47,7 @@ if($statusValue != ''){
 
 // Get request type ID for general requests
 $request_type_id = 1; // Default fallback
-$type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE main_table_name = 'general_requests' LIMIT 1");
+$type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'general_request' LIMIT 1");
 if ($type_query && mysqli_num_rows($type_query) > 0) {
     $type_row = mysqli_fetch_assoc($type_query);
     $request_type_id = $type_row['id'];
@@ -157,17 +157,14 @@ if ($query) {
             $menuItems .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$invSafe."'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>".__('cancel', 'Cancel')."</a>";
         }
 
-        // No extra actions - just the Open button (same as the smart requests list)
-        if ($menuItems === '') {
-            $actionButtons = $openBtn;
-        } else {
-            $actionButtons = "<div class='sr-actions'>".$openBtn."
+        // Open + menu (Open, Print, then delete/cancel when allowed)
+        $actionButtons = "<div class='sr-actions'>".$openBtn."
                             <div class='btn-group dropdown'>
                             <a href='javascript: void(0);' class='sr-more-btn dropdown-toggle arrow-none' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-vertical'></i></a>
                             <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
                                 <a href='view_general_request.php?id=".$invSafe."' class='dropdown-item text-dark'><i class='mdi mdi-eye-outline mr-2'></i>".__('open')."</a>
-                                <div class='dropdown-divider'></div>".$menuItems."</div></div></div>";
-        }
+                                <a href='gr_print.php?id=".$invSafe."' target='_blank' class='dropdown-item text-dark'><i class='fa fa-print mr-2'></i>".__('print')."</a>
+                                ".($menuItems !== '' ? "<div class='dropdown-divider'></div>".$menuItems : '')."</div></div></div>";
         
         $data[] = array(
             "id"                     => $row['id'],

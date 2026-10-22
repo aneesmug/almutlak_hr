@@ -1,0 +1,106 @@
+
+
+==================== AJAX REQUEST START - 2026-10-22 13:06:15 ====================
+Action: create_general_request
+POST keys: ["inv_no","emp_id","emp_name","request_title","comp_no","department_to","request_category","priority","description","items","action"]
+FILES keys: ["attachments"]
+Content-Type: multipart/form-data; boundary=----geckoformboundary8c4cc3af2c92beb292d1d734253acf39
+CONTENT_LENGTH: 1941
+FILES dump: {
+    "attachments": {
+        "name": [
+            ""
+        ],
+        "full_path": [
+            ""
+        ],
+        "type": [
+            ""
+        ],
+        "tmp_name": [
+            ""
+        ],
+        "error": [
+            4
+        ],
+        "size": [
+            0
+        ]
+    }
+}
+==================== AJAX REQUEST END ====================
+
+
+==================== AJAX REQUEST START - 2026-10-22 13:10:19 ====================
+Action: get_employees
+POST keys: ["action","search"]
+FILES keys: []
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+CONTENT_LENGTH: 28
+==================== AJAX REQUEST END ====================
+
+
+==================== AJAX REQUEST START - 2026-10-22 13:10:23 ====================
+Action: get_employees
+POST keys: ["action","search"]
+FILES keys: []
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+CONTENT_LENGTH: 28
+==================== AJAX REQUEST END ====================
+
+
+==================== AJAX REQUEST START - 2026-10-22 13:10:25 ====================
+Action: get_employees
+POST keys: ["action","search"]
+FILES keys: []
+Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+CONTENT_LENGTH: 32
+==================== AJAX REQUEST END ====================
+
+
+==================== AJAX REQUEST START - 2026-10-22 13:10:33 ====================
+Action: mark_delivery
+POST keys: ["received_by","items","action","inv_no"]
+FILES keys: ["attachments"]
+Content-Type: multipart/form-data; boundary=----geckoformboundary73970df9be534a119b1b7460199481b8
+CONTENT_LENGTH: 709
+FILES dump: {
+    "attachments": {
+        "name": {
+            "1": ""
+        },
+        "full_path": {
+            "1": ""
+        },
+        "type": {
+            "1": ""
+        },
+        "tmp_name": {
+            "1": ""
+        },
+        "error": {
+            "1": 4
+        },
+        "size": {
+            "1": 0
+        }
+    }
+}
+==================== AJAX REQUEST END ====================
+
+--- MARK_DELIVERY START ---
+content-length=709, post_max_size=24M, upload_max_filesize=20M
+Attachments received:
+{
+    "names": {
+        "1": ""
+    },
+    "sizes": {
+        "1": 0
+    },
+    "errors": {
+        "1": 4
+    }
+}
+SKIPPED item 1: empty filename or tmp_name
+Total item_attachments collected: 0

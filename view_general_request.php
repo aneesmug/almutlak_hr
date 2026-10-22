@@ -79,37 +79,8 @@ if (!$request_query || mysqli_num_rows($request_query) == 0) {
 
 $request = mysqli_fetch_assoc($request_query);
 
-// Access control: Check if user can view this request
-$can_view_request = false; // Default: deny access
-
-// 1. Administrators can view all requests
-if ($user_type == 'administrator') {
-    $can_view_request = true;
-}
-// 2. Management (dept 10) can view all requests
-elseif ($user_dept == 10) {
-    $can_view_request = true;
-}
-// 3. Check if user created this request
-elseif ($request['emp_id'] == $empid) {
-    $can_view_request = true;
-}
-// 4. Check if user is in the approval chain for this specific request
-else {
-    $approver_check_query = mysqli_query($conDB, "SELECT ra.id, ra.approval_level 
-        FROM request_approvers ra
-        WHERE ra.request_inv_no = '".escape_string($inv_no)."' 
-        AND ra.approver_id = ".(int)$empid);
-    
-    if ($approver_check_query && mysqli_num_rows($approver_check_query) > 0) {
-        // User is in the approval chain for this request
-        $can_view_request = true;
-    }
-    // 5. Department managers can view requests from their department
-    elseif ($emptypeget == 'Manager' && $request['user_dept'] == $user_dept) {
-        $can_view_request = true;
-    }
-}
+// Access control (shared with gr_print.php)
+$can_view_request = gr_can_view_request($conDB, $request);
 
 // Deny access if user doesn't have permission
 if (!$can_view_request) {
@@ -149,9 +120,10 @@ while ($attachment = mysqli_fetch_assoc($attachments_query)) {
     $attachments[] = $attachment;
 }
 
-// Fetch approval chain
+// Fetch approval chain (gr_request_type_id() also repairs a wrong main_table_name before approve/reject runs)
+gr_request_type_id($conDB);
 $approval_chain = [];
-$type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE main_table_name = 'general_requests' LIMIT 1");
+$type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'general_request' LIMIT 1");
 if ($type_query && mysqli_num_rows($type_query) > 0) {
     $type_row = mysqli_fetch_assoc($type_query);
     $request_type_id = $type_row['id'];
@@ -266,9 +238,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
                 // Notify first approver
                 $first_approver_id = $approver_ids[0];
+                // Where the request comes from - shown to approvers in the notification and the email
+                $from_dept = trim($request['dep_nme'] ?? '') ?: ($department_map[$request['user_dept'] ?? 0] ?? 'N/A');
+                $from_company = gr_company_name($conDB, $request['comp_no'] ?? 0, true) ?: 'N/A';
                 $first_approver_details = getEmployeeDetails($conDB, $first_approver_id);
                 if ($first_approver_details && !empty($first_approver_details['email'])) {
-                    create_browser_notification($conDB, $first_approver_id, "New General Request for Approval", "Request $inv_no is waiting for your action.", "view_general_request.php?id=".urlencode($inv_no));
+                    create_browser_notification($conDB, $first_approver_id, "New General Request for Approval", "Request $inv_no from $from_dept ($from_company) is waiting for your action.", "view_general_request.php?id=".urlencode($inv_no));
                     
                     // Send approval email with request details
                     $request_url = get_base_url() . '/view_general_request.php?id=' . urlencode($inv_no);
@@ -279,7 +254,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         'REQUEST_ID' => $inv_no,
                         'REQUEST_TITLE' => trim($request['request_title'] ?? '') ?: 'N/A',
                         'REQUESTER_NAME' => trim($request['emp_name'] ?? '') ?: 'N/A',
-                        'DEPARTMENT' => trim($request['dep_nme'] ?? '') ?: (isset($department_map[$request['user_dept'] ?? 0]) ? $department_map[$request['user_dept']] : 'N/A'),
+                        'DEPARTMENT' => $from_dept,
+                        'COMPANY' => $from_company,
+                        'TARGET_DEPARTMENT' => trim($request['department_to'] ?? '') ?: 'N/A',
                         'PRIORITY' => trim($request['priority'] ?? '') ? ucfirst($request['priority']) : 'N/A',
                         'CATEGORY' => trim($request['request_category'] ?? '') ?: 'N/A',
                         'DESCRIPTION' => trim($request['description'] ?? '') ?: 'No description provided',
@@ -341,7 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 // Email already sent by handle_approval_action
                 // Just create browser notification
                 $next_approver_id = $result['next_approver_id'];
-                create_browser_notification($conDB, $next_approver_id, "General Request for Approval", "Request $inv_no has been approved and is now waiting for your action.", "view_general_request.php?id=".urlencode($inv_no));
+                create_browser_notification($conDB, $next_approver_id, "General Request for Approval", "Request $inv_no from " . (trim($request['dep_nme'] ?? '') ?: 'N/A') . " has been approved and is now waiting for your action.", "view_general_request.php?id=".urlencode($inv_no));
             } elseif ($status_action == 'reject') {
                 // Email already sent by handle_approval_action
                 // Just create browser notification
@@ -572,17 +549,16 @@ $chain_approved = count(array_filter($approval_chain, function ($s) { return $s[
                         </div>
                         <?php endif; ?>
 
-                        <?php if ($is_draft_owner || $can_deliver): ?>
                         <div class="sr-hero-actions hidden-print">
                             <?php if ($is_draft_owner): ?>
                                 <button type="button" class="sr-btn sr-btn-sm grAddItemBtn"><i class="mdi mdi-plus"></i> <?= __('add_new_item', 'Add New Item') ?></button>
                             <?php endif; ?>
                             <span class="sr-spacer"></span>
+                            <a href="gr_print.php?id=<?= urlencode($inv_no) ?>" class="sr-btn sr-btn-sm" target="_blank"><i class="mdi mdi-printer"></i> <?= __('print') ?></a>
                             <?php if ($can_deliver): ?>
                                 <button type="button" class="sr-btn sr-btn-sm sr-btn-success grDeliverBtn"><i class="mdi mdi-truck-delivery"></i> <?= __('deliver_items', 'Deliver Items') ?></button>
                             <?php endif; ?>
                         </div>
-                        <?php endif; ?>
                     </div>
 
                     <?php if ($current_status == 'rejected' && $rejection_note !== ''): ?>

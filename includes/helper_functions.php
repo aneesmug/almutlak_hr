@@ -2908,9 +2908,10 @@ if (!function_exists('get_request_details_for_email')) {
             return false;
         } elseif ($request_type === 'general_request') {
             // Fetch general request details
-            $sql = "SELECT gr.*, d.dep_nme as department_name
+            $sql = "SELECT gr.*, d.dep_nme as department_name, c.comp_name as company_name
                     FROM general_requests gr 
                     LEFT JOIN department d ON gr.user_dept = d.id
+                    LEFT JOIN companies c ON c.comp_id = gr.comp_no
                     WHERE gr.inv_no = ? 
                     LIMIT 1";
 
@@ -2923,6 +2924,8 @@ if (!function_exists('get_request_details_for_email')) {
                         $template_data['REQUEST_TITLE'] = $row['request_title'] ?? 'General Request';
                         $template_data['REQUESTER_NAME'] = $row['emp_name'] ?? 'Employee';
                         $template_data['DEPARTMENT'] = $row['department_name'] ?? 'N/A';
+                        $template_data['COMPANY'] = $row['company_name'] ?? 'N/A';
+                        $template_data['TARGET_DEPARTMENT'] = $row['department_to'] ?? 'N/A';
                         $template_data['PRIORITY'] = ucfirst($row['priority'] ?? 'normal');
                         $template_data['CATEGORY'] = $row['request_category'] ?? 'N/A';
                         $template_data['DESCRIPTION'] = $row['description'] ?? 'No description provided';

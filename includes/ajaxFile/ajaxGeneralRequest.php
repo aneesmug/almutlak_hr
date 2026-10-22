@@ -62,7 +62,7 @@ try {
         }
 
         // Validate required fields
-        if (empty($_POST['inv_no']) || empty($_POST['request_title']) || empty($_POST['department_to']) || empty($_POST['request_category']) || empty($_POST['priority']) || empty($_POST['comp_no']) || empty($_POST['user_dept'])) {
+        if (empty($_POST['inv_no']) || empty($_POST['request_title']) || empty($_POST['department_to']) || empty($_POST['request_category']) || empty($_POST['priority']) || empty($_POST['comp_no'])) {
             $response['message'] = __('fill_out_form_error', 'Please fill all required fields');
             echo json_encode($response);
             exit;
@@ -83,7 +83,9 @@ try {
         $priority = mysqli_real_escape_string($conDB, $_POST['priority']);
         $description = mysqli_real_escape_string($conDB, $_POST['description'] ?? '');
         $emp_name = mysqli_real_escape_string($conDB, $_POST['emp_name']);
-        $user_dept = (int)$_POST['user_dept'];
+        // Requester department = the logged-in user's department (session_check.php), never the
+        // posted value - approvers and the email show it as "From Department".
+        $user_dept = (int)($user_dept ?? 0);
 
         // Company the request is raised for - must be one this user may use
         require_once __DIR__ . '/../general_request_helpers.php';
@@ -94,8 +96,7 @@ try {
             echo json_encode($response);
             exit;
         }
-        // Requester department (defaults to the user's own, may be changed) must exist
-        if ($user_dept <= 0 || !array_key_exists($user_dept, gr_department_options($conDB))) {
+        if ($user_dept <= 0) {
             $response['message'] = __('select_valid_department', 'Please select a valid department');
             echo json_encode($response);
             exit;
@@ -316,7 +317,7 @@ try {
             mysqli_query($conDB, "DELETE FROM general_request_items WHERE request_inv_no = '$inv_no'");
             
             // Delete approval chain
-            $type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE main_table_name = 'general_requests' LIMIT 1");
+            $type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'general_request' LIMIT 1");
             if ($type_query && mysqli_num_rows($type_query) > 0) {
                 $type_row = mysqli_fetch_assoc($type_query);
                 $request_type_id = $type_row['id'];

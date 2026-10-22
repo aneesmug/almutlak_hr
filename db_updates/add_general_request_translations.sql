@@ -173,4 +173,16 @@ INSERT IGNORE INTO `translations` (`lang_key`, `lang_code`, `translation`) VALUE
 ('select_department', 'en', 'Select department'),
 ('select_department', 'ar', 'اختر القسم'),
 ('select_valid_department', 'en', 'Please select a valid department'),
-('select_valid_department', 'ar', 'يرجى اختيار قسم صحيح');
+('select_valid_department', 'ar', 'يرجى اختيار قسم صحيح'),
+('print_general_request', 'en', 'Print General Request'),
+('print_general_request', 'ar', 'طباعة الطلب العام'),
+('print_fits_one_page', 'en', 'Fits on one page'),
+('print_fits_one_page', 'ar', 'يتسع في صفحة واحدة'),
+('print_scaled_to_fit', 'en', 'Scaled to fit one page:'),
+('print_scaled_to_fit', 'ar', 'تم التصغير ليتسع في صفحة واحدة:'),
+('printed_by', 'en', 'Printed by'),
+('printed_by', 'ar', 'طُبع بواسطة'),
+('printed_on', 'en', 'Printed on'),
+('printed_on', 'ar', 'تاريخ الطباعة'),
+('receiver_signature', 'en', 'Receiver signature'),
+('receiver_signature', 'ar', 'توقيع المستلم');

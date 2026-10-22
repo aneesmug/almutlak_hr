@@ -24,9 +24,6 @@ if(mysqli_num_rows($query) == 1){
     include("./includes/avatar_select.php");
 }
 
-// Requester department list (defaults to the user's own department, editable)
-$department_options = gr_department_options($conDB);
-
 // Generate invoice number if not present
 if (!isset($_GET['id']) || $_GET['id'] === '') {
     $inv_no = 'GR' . $empid . date("ymdHis");
@@ -156,7 +153,7 @@ $default_company = isset($company_options[(int)($user_company ?? 0)]) ? (int)$us
                                             <label for="f_request_title"><?= __('request_title', 'Request Title') ?> <span class="text-danger">*</span></label>
                                             <input type="text" name="request_title" id="f_request_title" class="form-control" maxlength="250" data-required="1" placeholder="<?= htmlspecialchars(__('enter_request_title', 'Enter request title'), ENT_QUOTES) ?>">
                                         </div>
-                                        <div class="sr-fcol c-6">
+                                        <div class="sr-fcol c-4">
                                             <label for="f_comp_no"><?= __('company', 'Company') ?> <span class="text-danger">*</span></label>
                                             <select name="comp_no" id="f_comp_no" class="form-control" data-required="1" data-placeholder="<?= htmlspecialchars(__('select_company', 'Select company'), ENT_QUOTES) ?>">
                                                 <option value=""></option>
@@ -165,16 +162,7 @@ $default_company = isset($company_options[(int)($user_company ?? 0)]) ? (int)$us
                                                 <?php endforeach; ?>
                                             </select>
                                         </div>
-                                        <div class="sr-fcol c-6">
-                                            <label for="f_user_dept"><?= __('requester_department', 'Requester Department') ?> <span class="text-danger">*</span></label>
-                                            <select name="user_dept" id="f_user_dept" class="form-control" data-required="1" data-placeholder="<?= htmlspecialchars(__('select_department', 'Select department'), ENT_QUOTES) ?>">
-                                                <option value=""></option>
-                                                <?php foreach ($department_options as $did => $dname): ?>
-                                                    <option value="<?= $did ?>"<?= $did === (int)$user_dept ? ' selected' : '' ?>><?= htmlspecialchars($dname) ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                        <div class="sr-fcol c-6">
+                                        <div class="sr-fcol c-4">
                                             <label for="f_department_to"><?= __('target_department', 'Target Department') ?> <span class="text-danger">*</span></label>
                                             <select name="department_to" id="f_department_to" class="form-control" data-required="1">
                                                 <option value=""><?= __('select') ?></option>
@@ -183,7 +171,7 @@ $default_company = isset($company_options[(int)($user_company ?? 0)]) ? (int)$us
                                                 <?php endforeach; ?>
                                             </select>
                                         </div>
-                                        <div class="sr-fcol c-6">
+                                        <div class="sr-fcol c-4">
                                             <label for="f_request_category"><?= __('request_category', 'Request Category') ?> <span class="text-danger">*</span></label>
                                             <select name="request_category" id="f_request_category" class="form-control" data-required="1">
                                                 <option value=""><?= __('select') ?></option>
@@ -370,7 +358,7 @@ $default_company = isset($company_options[(int)($user_company ?? 0)]) ? (int)$us
             $('#grItemCount').text($rows.length);
         }
 
-        $('#f_comp_no, #f_user_dept').each(function () {
+        $('#f_comp_no').each(function () {
             $(this).select2({ placeholder: $(this).data('placeholder'), width: '100%' });
         }).on('change', function () {
             $(this).next('.select2-container').find('.select2-selection').removeClass('is-invalid');
@@ -455,12 +443,12 @@ $default_company = isset($company_options[(int)($user_company ?? 0)]) ? (int)$us
             });
             $bad.addClass('is-invalid');
             // select2 hides the real <select>: mark its visible box instead
-            $('#f_comp_no, #f_user_dept').each(function () {
+            $('#f_comp_no').each(function () {
                 $(this).next('.select2-container').find('.select2-selection').toggleClass('is-invalid', $bad.is(this));
             });
             if ($items.children('.gr-item').length === 0) { fail(T.oneItem); return; }
             if ($bad.length) {
-                if (!$bad.first().is('#f_comp_no, #f_user_dept')) $bad.first().trigger('focus');
+                if (!$bad.first().is('#f_comp_no')) $bad.first().trigger('focus');
                 fail(T.required);
                 return;
             }

@@ -114,14 +114,14 @@ function gr_company_options($conDB) {
     return $out;
 }
 
-// Display name of one company (comp_id), '' when unknown.
-function gr_company_name($conDB, $comp_no) {
+// Display name of one company (comp_id), '' when unknown. $english = true for emails/notifications.
+function gr_company_name($conDB, $comp_no, $english = false) {
     global $is_rtl;
     if (!$comp_no) return '';
     $res = mysqli_query($conDB, "SELECT `comp_name`, `comp_name_ar` FROM `companies` WHERE `comp_id` = " . (int)$comp_no . " LIMIT 1");
     $r = $res ? mysqli_fetch_assoc($res) : null;
     if (!$r) return '';
-    return (($is_rtl ?? false) && !empty($r['comp_name_ar'])) ? $r['comp_name_ar'] : $r['comp_name'];
+    return (!$english && ($is_rtl ?? false) && !empty($r['comp_name_ar'])) ? $r['comp_name_ar'] : $r['comp_name'];
 }
 
 // Display label of a stored target department / category: translated label for the known values,
@@ -136,13 +136,30 @@ function gr_category_label($value) {
     return $map[$value] ?? getDisplayName((string)$value);
 }
 
-// Departments a request can be raised from: id => label (Arabic name in RTL).
-function gr_department_options($conDB) {
-    global $is_rtl;
-    $out = [];
-    $res = mysqli_query($conDB, "SELECT `id`, `dep_nme`, `dep_nme_ar` FROM `department` ORDER BY `dep_nme`");
-    while ($res && ($r = mysqli_fetch_assoc($res))) {
-        $out[(int)$r['id']] = (($is_rtl ?? false) && !empty($r['dep_nme_ar'])) ? $r['dep_nme_ar'] : getDisplayName($r['dep_nme']);
+// approval_request_types id for General Requests. Looked up by type_name (stable). Also repairs a
+// row whose main_table_name was saved as 'general_request' - handle_approval_action() updates that
+// table by name, so approve/reject failed and the chain lookups by main_table_name found nothing.
+function gr_request_type_id($conDB) {
+    static $id = null;
+    if ($id !== null) return $id;
+    @mysqli_query($conDB, "UPDATE `approval_request_types` SET `main_table_name` = 'general_requests' WHERE `type_name` = 'general_request' AND `main_table_name` <> 'general_requests'");
+    $res = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'general_request' LIMIT 1");
+    $row = $res ? mysqli_fetch_assoc($res) : null;
+    $id = $row ? (int)$row['id'] : 0;
+    return $id;
+}
+
+// Who may open / print one general request (view_general_request.php, gr_print.php):
+// administrators, Management (dept 10), the creator, anyone in its approval chain,
+// and managers of the requester's department. Uses the session globals from session_check.php.
+function gr_can_view_request($conDB, array $request) {
+    global $user_type, $user_dept, $empid, $emptypeget;
+    if ($user_type == 'administrator' || $user_dept == 10 || $request['emp_id'] == $empid) {
+        return true;
     }
-    return $out;
+    $res = mysqli_query($conDB, "SELECT 1 FROM request_approvers WHERE request_inv_no = '" . mysqli_real_escape_string($conDB, (string)$request['inv_no']) . "' AND approver_id = " . (int)$empid . " LIMIT 1");
+    if ($res && mysqli_num_rows($res) > 0) {
+        return true;
+    }
+    return $emptypeget == 'Manager' && $request['user_dept'] == $user_dept;
 }

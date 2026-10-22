@@ -376,7 +376,7 @@ if ($is_system_admin || $user_role == 'Administrator') {
 } else {
     // All other users see a count of general requests pending *their* approval
     $general_request_type_id = 0;
-    $gr_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE main_table_name = 'general_requests' LIMIT 1");
+    $gr_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'general_request' LIMIT 1");
     if ($row = mysqli_fetch_assoc($gr_type_query)) {
         $general_request_type_id = (int)$row['id'];
     }
