@@ -167,6 +167,23 @@ if (!empty($allowed_employees_array)) {
 	}
 }
 
+// Access Scope card: [allowed count, total, name list] per scope. Empty name list = full access.
+$scope_split = function ($names, $all_label) {
+	$names = trim((string)$names);
+	return ($names === '' || $names === $all_label) ? [] : array_values(array_filter(array_map('trim', explode(',', $names)), 'strlen'));
+};
+$scope_count = function ($sql) use ($conDB) {
+	$res = mysqli_query($conDB, $sql);
+	$row = $res ? mysqli_fetch_row($res) : null;
+	return $row ? (int)$row[0] : 0;
+};
+$scope_company_list = $scope_split($allowed_company_names, 'All Companies');
+$scope_department_list = $scope_split($allowed_department_names, 'All Departments');
+$scope_employee_list = $scope_split($allowed_employee_names, '');
+$scope_company_total = $scope_count("SELECT COUNT(*) FROM `companies`");
+$scope_department_total = $scope_count("SELECT COUNT(*) FROM `department`");
+$scope_employee_total = $scope_employee_list ? $scope_count("SELECT COUNT(*) FROM `employees` WHERE `status` = 1") : 0;
+
 // Only HR, Department HR, and System Admin can view dashboard expiry sections
 $can_view_expiry_block = ($is_system_admin || $isHR || $isDeptHr || $isGR_Officer);
 
@@ -549,11 +566,26 @@ if(isset($_POST['submit'])){
 			.dex-title-icon.tone-red { background: #fef2f2; color: #dc2626; }
 			.dex-title-icon.tone-amber { background: #fffbeb; color: #d97706; }
 			.dex-title-icon.tone-sky { background: #f0f9ff; color: #0284c7; }
-			.dex-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
-			.dex-stat { padding: 8px 12px; border-radius: 10px; border: 1px solid #e5e7eb; background: #fff; }
-			.dex-stat-label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
-			.dex-stat-value { display: block; font-size: 18px; font-weight: 700; color: #0f172a; line-height: 1.3; font-variant-numeric: tabular-nums; }
-			.dex-stat.tone-red .dex-stat-value { color: #b91c1c; }
+			.dex-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+			@media (max-width: 640px) { .dex-stats { grid-template-columns: 1fr; } }
+			.dex-stat {
+				--ds: #6366f1; --ds-fg: #4f46e5; --ds-bg: #eef2ff;
+				position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 10px; text-align: start;
+				padding: 14px 16px 12px; border-radius: 14px; border: 1px solid #e5e7eb; background: #fff;
+			}
+			.dex-stat::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, var(--ds), color-mix(in srgb, var(--ds) 30%, transparent)); }
+			.dex-stat.is-sky { --ds: #0ea5e9; --ds-fg: #0369a1; --ds-bg: #f0f9ff; }
+			.dex-stat.is-amber { --ds: #f59e0b; --ds-fg: #b45309; --ds-bg: #fffbeb; }
+			.dex-stat.is-red { --ds: #ef4444; --ds-fg: #b91c1c; --ds-bg: #fef2f2; }
+			.dex-stat.is-green { --ds: #10b981; --ds-fg: #047857; --ds-bg: #ecfdf5; }
+			.dex-stat-top { display: flex; align-items: center; gap: 12px; }
+			.dex-stat-icon { width: 40px; height: 40px; border-radius: 12px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; background: var(--ds-bg); color: var(--ds-fg); }
+			.dex-stat-text { min-width: 0; display: flex; flex-direction: column; }
+			.dex-stat-label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+			.dex-stat-value { display: block; font-size: 24px; font-weight: 800; color: var(--ds-fg); line-height: 1.15; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+			.dex-stat-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; color: #64748b; }
+			.dex-stat-bar { height: 5px; border-radius: 999px; background: #eef1f5; overflow: hidden; }
+			.dex-stat-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--ds); }
 			.dex-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
 			.dex-search { position: relative; flex: 0 1 280px; min-width: 200px; }
 			.dex-search i { position: absolute; inset-inline-start: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 16px; }
@@ -598,6 +630,13 @@ if(isset($_POST['submit'])){
 			}
 			html.app-dark .swal2-popup.dex-popup .swal2-title, html.app-dark .dex-stat-value, html.app-dark .dex-emp-name { color: #f1f5f9; }
 			html.app-dark .dex-stat, html.app-dark .dex-list, html.app-dark .dex-chip { background: #1d2436; border-color: #2a3348; color: #d8dee9; }
+			html.app-dark .dex-stat { --ds-fg: #a5b4fc; --ds-bg: #262d52; }
+			html.app-dark .dex-stat.is-sky { --ds-fg: #7dd3fc; --ds-bg: #102c3d; }
+			html.app-dark .dex-stat.is-amber { --ds-fg: #fcd34d; --ds-bg: #3a2e12; }
+			html.app-dark .dex-stat.is-red { --ds-fg: #fca5a5; --ds-bg: #3a1717; }
+			html.app-dark .dex-stat.is-green { --ds-fg: #6ee7b7; --ds-bg: #10302a; }
+			html.app-dark .dex-stat-label, html.app-dark .dex-stat-sub { color: #94a3b8; }
+			html.app-dark .dex-stat-bar { background: #2a3348; }
 			html.app-dark .dex-search input { background: #161c2a; border-color: #2a3348; color: #f1f5f9; }
 			html.app-dark .dex-row { border-color: #252e44; }
 			html.app-dark .dex-row:hover { background: #252e44; }
@@ -715,23 +754,61 @@ if(isset($_POST['submit'])){
 			.dash-expiry { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px; }
 			@media (max-width: 991px) { .dash-expiry { grid-template-columns: 1fr; } }
 			.sr-page .doc-expiry-card {
-				display: flex; gap: 14px; align-items: center; min-height: 0; padding: 16px; border-radius: 12px; border: 1px solid; cursor: pointer;
-				transition: transform .15s, box-shadow .15s;
+				--dx: #0ea5e9; --dx-fg: var(--tone-sky-fg); --dx-bg: var(--tone-sky-bg);
+				position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 14px; min-height: 0;
+				padding: 18px 18px 14px; border-radius: 14px; border: 1px solid var(--sr-border); background: var(--sr-surface, #fff);
+				color: var(--sr-text); cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s;
 			}
-			.sr-page .doc-expiry-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15, 23, 42, .08); }
-			.doc-expiry-card .dx-count { flex: 0 0 auto; min-width: 58px; height: 58px; padding: 0 8px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; background: var(--sr-surface); }
-			.doc-expiry-card .dx-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
-			.doc-expiry-card .dx-sub { margin-top: 4px; font-size: 12px; opacity: .85; line-height: 1.5; }
+			.sr-page .doc-expiry-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, var(--dx), color-mix(in srgb, var(--dx) 35%, transparent)); }
+			.sr-page .doc-expiry-card.tone-amber { --dx: #f59e0b; --dx-fg: var(--tone-amber-fg); --dx-bg: var(--tone-amber-bg); }
+			.sr-page .doc-expiry-card.tone-red { --dx: #ef4444; --dx-fg: var(--tone-red-fg); --dx-bg: var(--tone-red-bg); }
+			.sr-page .doc-expiry-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--dx) 45%, var(--sr-border)); box-shadow: 0 12px 28px -10px color-mix(in srgb, var(--dx) 45%, transparent); }
+			.doc-expiry-card .dx-head { display: flex; align-items: center; gap: 10px; }
+			.doc-expiry-card .dx-icon { width: 38px; height: 38px; border-radius: 11px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; background: var(--dx-bg); color: var(--dx-fg); }
+			.doc-expiry-card .dx-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: var(--sr-text); }
+			.doc-expiry-card .dx-range { flex: 0 0 auto; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--dx-bg); color: var(--dx-fg); white-space: nowrap; }
+			.doc-expiry-card .dx-main { display: flex; align-items: baseline; gap: 8px; }
+			.doc-expiry-card .dx-count { font-size: 34px; font-weight: 800; line-height: 1.1; letter-spacing: -.5px; color: var(--dx-fg); font-variant-numeric: tabular-nums; }
+			.doc-expiry-card .dx-count-label { font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+			.doc-expiry-card .dx-docs { display: flex; flex-direction: column; gap: 9px; }
+			.doc-expiry-card .dx-doc { display: grid; grid-template-columns: 96px 1fr 34px; align-items: center; gap: 10px; font-size: 12px; color: var(--sr-text-2, var(--sr-muted)); }
+			.doc-expiry-card .dx-doc i { width: 14px; color: var(--sr-muted); }
+			.doc-expiry-card .dx-doc-bar { height: 6px; border-radius: 999px; background: var(--sr-surface-3, #eef1f5); overflow: hidden; }
+			.doc-expiry-card .dx-doc-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--dx); }
+			.doc-expiry-card .dx-doc-num { text-align: end; font-weight: 800; color: var(--sr-text); font-variant-numeric: tabular-nums; }
+			.doc-expiry-card .dx-foot { display: flex; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px dashed var(--sr-border); font-size: 12px; font-weight: 700; color: var(--dx-fg); }
+			.doc-expiry-card .dx-foot i { transition: transform .15s; }
+			.doc-expiry-card:hover .dx-foot i { transform: translateX(3px); }
+			html[dir="rtl"] .doc-expiry-card .dx-foot i { transform: scaleX(-1); }
+			html[dir="rtl"] .doc-expiry-card:hover .dx-foot i { transform: translateX(-3px) scaleX(-1); }
 
 			/* Access scope */
 			.dash-scope { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px; }
 			@media (max-width: 991px) { .dash-scope { grid-template-columns: 1fr; } }
-			.dash-scope-item { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--sr-border); background: var(--sr-surface-2); min-width: 0; }
-			.dash-scope-item h6 { margin: 0 0 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); display: flex; align-items: center; gap: 6px; }
-			.dash-scope-item h6 i { color: var(--sr-accent); }
-			.dash-scope-item p { margin: 0; font-size: 13px; color: var(--sr-text-2); line-height: 1.5; word-break: break-word; }
-			.sr-page .allowed-employees-card { background: transparent; border: 0; padding: 0; }
-			.sr-page .allowed-employees-card .employee-badge { background: var(--sr-accent-soft); color: var(--sr-accent-strong); box-shadow: none; font-weight: 600; }
+			.dash-scope-item {
+				--sc: #6366f1; --sc-fg: #5b21b6; --sc-bg: #f5f3ff;
+				position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+				padding: 18px; border-radius: 14px; border: 1px solid var(--sr-border); background: var(--sr-surface, #fff);
+				transition: transform .15s, box-shadow .15s, border-color .15s;
+			}
+			.dash-scope-item::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, var(--sc), color-mix(in srgb, var(--sc) 35%, transparent)); }
+			.dash-scope-item.sc-sky { --sc: #0ea5e9; --sc-fg: var(--tone-sky-fg); --sc-bg: var(--tone-sky-bg); }
+			.dash-scope-item.sc-green { --sc: #10b981; --sc-fg: var(--tone-green-fg, #047857); --sc-bg: var(--tone-green-bg, #ecfdf5); }
+			.dash-scope-item:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--sc) 45%, var(--sr-border)); box-shadow: 0 12px 28px -10px color-mix(in srgb, var(--sc) 45%, transparent); }
+			html.app-dark .dash-scope-item.sc-violet { --sc-fg: #c4b5fd; --sc-bg: #2a2350; }
+			.dash-scope-head { display: flex; align-items: center; gap: 10px; }
+			.dash-scope-icon { width: 38px; height: 38px; border-radius: 11px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; background: var(--sc-bg); color: var(--sc-fg); }
+			.dash-scope-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: var(--sr-text); }
+			.dash-scope-pill { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--sc-bg); color: var(--sc-fg); white-space: nowrap; }
+			.dash-scope-main { display: flex; align-items: baseline; gap: 8px; }
+			.dash-scope-count { font-size: 30px; font-weight: 800; line-height: 1.1; letter-spacing: -.5px; color: var(--sc-fg); font-variant-numeric: tabular-nums; }
+			.dash-scope-of { font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+			.dash-scope-bar { height: 6px; border-radius: 999px; background: var(--sr-surface-3, #eef1f5); overflow: hidden; }
+			.dash-scope-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--sc); }
+			.dash-scope-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 112px; overflow-y: auto; padding-top: 12px; border-top: 1px dashed var(--sr-border); }
+			.dash-scope-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--sr-surface-2, #f8fafc); border: 1px solid var(--sr-border); color: var(--sr-text-2, var(--sr-text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+			.dash-scope-chip.is-all { background: var(--sc-bg); border-color: transparent; color: var(--sc-fg); }
+			.dash-scope-chip.is-more { background: transparent; border-style: dashed; color: var(--sr-muted); cursor: help; }
 
 			.dash-dt-search { max-width: 300px; }
 			.sr-page .sr-table .iqama_exp_hijri { white-space: nowrap; }
@@ -932,9 +1009,9 @@ if(isset($_POST['submit'])){
 						<?php if ($can_view_expiry_block): ?>
 						<?php
 						$dash_expiry_tiles = [
-							['info', 'sky', __('within_30_days', getDisplayName('Within 30 Days')), getDisplayName('Employees in 21-30 days range'), 'fa-circle-info'],
-							['warning', 'amber', __('within_20_days', getDisplayName('Within 20 Days')), getDisplayName('Employees in 11-20 days range'), 'fa-triangle-exclamation'],
-							['danger', 'red', __('within_10_days', getDisplayName('Within 10 Days')), getDisplayName('Employees in 0-10 days or expired range'), 'fa-skull-crossbones'],
+							['info', 'sky', __('within_30_days', getDisplayName('Within 30 Days')), getDisplayName('Employees in 21-30 days range'), 'fa-circle-info', __('days_21_30', '21–30 days')],
+							['warning', 'amber', __('within_20_days', getDisplayName('Within 20 Days')), getDisplayName('Employees in 11-20 days range'), 'fa-triangle-exclamation', __('days_11_20', '11–20 days')],
+							['danger', 'red', __('within_10_days', getDisplayName('Within 10 Days')), getDisplayName('Employees in 0-10 days or expired range'), 'fa-skull-crossbones', __('days_0_10_expired', '≤10 days / expired')],
 						];
 						?>
 						<div class="sr-card">
@@ -943,16 +1020,40 @@ if(isset($_POST['submit'])){
 								<span class="sr-card-sub"><?= __('click_card_to_view_list', 'Click a card to see the employees') ?></span>
 							</div>
 							<div class="dash-expiry">
-								<?php foreach ($dash_expiry_tiles as [$x_level, $x_tone, $x_title, $x_tip, $x_icon]): ?>
+								<?php foreach ($dash_expiry_tiles as [$x_level, $x_tone, $x_title, $x_tip, $x_icon, $x_range]):
+									// Bars: each document type's share of the documents expiring in this range
+									$x_docs = [
+										['id_iqama', getDisplayName('ID/Iqama'), 'fa-id-card'],
+										['passport', getDisplayName('Passport'), 'fa-passport'],
+										['contract', getDisplayName('Contract'), 'fa-file-signature'],
+									];
+									$x_doc_total = 0;
+									foreach ($x_docs as $x_doc) { $x_doc_total += (int)$doc_expiry_doc_counts[$x_level][$x_doc[0]]; }
+								?>
 									<div class="doc-expiry-card tone-<?= $x_tone ?>" data-level="<?= $x_level ?>" title="<?= htmlspecialchars($x_tip) ?>">
-										<span class="dx-count"><?= (int)$doc_expiry_counts[$x_level] ?></span>
-										<div style="min-width: 0;">
-											<div class="dx-title"><i class="fa <?= $x_icon ?>"></i> <?= htmlspecialchars($x_title) ?></div>
-											<div class="dx-sub">
-												<?= getDisplayName('ID/Iqama') ?>: <b><?= (int)$doc_expiry_doc_counts[$x_level]['id_iqama'] ?></b> &middot;
-												<?= getDisplayName('Passport') ?>: <b><?= (int)$doc_expiry_doc_counts[$x_level]['passport'] ?></b> &middot;
-												<?= getDisplayName('Contract') ?>: <b><?= (int)$doc_expiry_doc_counts[$x_level]['contract'] ?></b>
-											</div>
+										<div class="dx-head">
+											<span class="dx-icon"><i class="fa <?= $x_icon ?>"></i></span>
+											<span class="dx-title"><?= htmlspecialchars($x_title) ?></span>
+											<span class="dx-range"><?= htmlspecialchars($x_range) ?></span>
+										</div>
+										<div class="dx-main">
+											<span class="dx-count"><?= (int)$doc_expiry_counts[$x_level] ?></span>
+											<span class="dx-count-label"><?= getDisplayName('Employees') ?></span>
+										</div>
+										<div class="dx-docs">
+											<?php foreach ($x_docs as [$x_key, $x_label, $x_doc_icon]):
+												$x_n = (int)$doc_expiry_doc_counts[$x_level][$x_key];
+											?>
+												<div class="dx-doc">
+													<span><i class="fa <?= $x_doc_icon ?>"></i> <?= htmlspecialchars($x_label) ?></span>
+													<span class="dx-doc-bar"><span style="width: <?= $x_doc_total > 0 ? round($x_n / $x_doc_total * 100, 1) : 0 ?>%;"></span></span>
+													<span class="dx-doc-num"><?= $x_n ?></span>
+												</div>
+											<?php endforeach; ?>
+										</div>
+										<div class="dx-foot">
+											<span><?= __('view_employees', 'View employees') ?></span>
+											<i class="fa fa-arrow-right"></i>
 										</div>
 									</div>
 								<?php endforeach; ?>
@@ -964,23 +1065,54 @@ if(isset($_POST['submit'])){
 							<div class="sr-card-head">
 								<h5 class="sr-card-title"><i class="fa fa-shield-halved"></i> <?= getDisplayName('Access Scope') ?></h5>
 							</div>
+							<?php
+							// [tone, icon, title, allowed names (empty = all), total, "all" label]
+							$dash_scopes = [
+								['violet', 'fa-building', __('allowed_companies') ?: 'Allowed Companies', $scope_company_list, $scope_company_total, __('all_companies', 'All Companies')],
+								['sky', 'fa-sitemap', __('allowed_departments') ?: 'Allowed Departments', $scope_department_list, $scope_department_total, __('all_departments', 'All Departments')],
+							];
+							if ($scope_employee_list) {
+								$dash_scopes[] = ['green', 'fa-users', __('allowed_employees') ?: 'Allowed Employees', $scope_employee_list, $scope_employee_total, ''];
+							}
+							$scope_chip_max = 12;
+							?>
 							<div class="dash-scope">
-								<div class="dash-scope-item">
-									<h6><i class="fa fa-building"></i> <?= __('allowed_companies') ?: 'Allowed Companies' ?></h6>
-									<p><?= htmlspecialchars($allowed_company_names) ?></p>
-								</div>
-								<div class="dash-scope-item">
-									<h6><i class="fa fa-sitemap"></i> <?= __('allowed_departments') ?: 'Allowed Departments' ?></h6>
-									<p><?= htmlspecialchars($allowed_department_names) ?></p>
-								</div>
-								<?php if (!empty($allowed_employee_names)): ?>
-								<div class="dash-scope-item allowed-employees-card" id="allowed-employees-badge-card">
-									<h6><i class="fa fa-users"></i> <?= __('allowed_employees') ?: 'Allowed Employees' ?></h6>
-									<div class="allowed-employees-card-content" id="allowed-employees-container">
-										<!-- Badges will be populated by JavaScript -->
+								<?php foreach ($dash_scopes as [$sc_tone, $sc_icon, $sc_title, $sc_list, $sc_total, $sc_all_label]):
+									$sc_full = !$sc_list;
+									$sc_count = $sc_full ? $sc_total : count($sc_list);
+									$sc_pct = $sc_full ? 100 : ($sc_total > 0 ? min(100, round($sc_count / $sc_total * 100, 1)) : 100);
+								?>
+									<div class="dash-scope-item sc-<?= $sc_tone ?>">
+										<div class="dash-scope-head">
+											<span class="dash-scope-icon"><i class="fa <?= $sc_icon ?>"></i></span>
+											<span class="dash-scope-title"><?= htmlspecialchars($sc_title) ?></span>
+											<?php if ($sc_full): ?>
+												<span class="dash-scope-pill"><i class="fa fa-circle-check"></i> <?= __('full_access', 'Full access') ?></span>
+											<?php else: ?>
+												<span class="dash-scope-pill"><i class="fa fa-filter"></i> <?= __('restricted', 'Restricted') ?></span>
+											<?php endif; ?>
+										</div>
+										<div>
+											<div class="dash-scope-main">
+												<span class="dash-scope-count"><?= number_format($sc_count) ?></span>
+												<?php if ($sc_total > 0): ?><span class="dash-scope-of"><?= __('of', 'of') ?> <?= number_format($sc_total) ?></span><?php endif; ?>
+											</div>
+											<div class="dash-scope-bar" style="margin-top: 8px;"><span style="width: <?= $sc_pct ?>%;"></span></div>
+										</div>
+										<div class="dash-scope-chips">
+											<?php if ($sc_full): ?>
+												<span class="dash-scope-chip is-all"><i class="fa fa-infinity"></i> <?= htmlspecialchars($sc_all_label) ?></span>
+											<?php else: ?>
+												<?php foreach (array_slice($sc_list, 0, $scope_chip_max) as $sc_name): ?>
+													<span class="dash-scope-chip" title="<?= htmlspecialchars($sc_name) ?>"><?= htmlspecialchars($sc_name) ?></span>
+												<?php endforeach; ?>
+												<?php if (count($sc_list) > $scope_chip_max): ?>
+													<span class="dash-scope-chip is-more" title="<?= htmlspecialchars(implode(', ', array_slice($sc_list, $scope_chip_max))) ?>">+<?= count($sc_list) - $scope_chip_max ?> <?= __('more', 'more') ?></span>
+												<?php endif; ?>
+											<?php endif; ?>
+										</div>
 									</div>
-								</div>
-								<?php endif; ?>
+								<?php endforeach; ?>
 							</div>
 						</div>
 
@@ -1481,7 +1613,7 @@ if(isset($_POST['submit'])){
 			function buildDocExpiryListHtml(level) {
 				var rows = (docExpiryBandData && docExpiryBandData[level]) ? docExpiryBandData[level] : [];
 				if (!rows.length) {
-					return '<div class="dex-empty"><i class="mdi mdi-file-check"></i><?= getDisplayName('No employees found in this range.') ?></div>';
+					return '<div class="dex-empty"><i class="fa fa-file-circle-check"></i><?= getDisplayName('No employees found in this range.') ?></div>';
 				}
 
 				var docCount = 0, expiredCount = 0, types = {};
@@ -1494,7 +1626,7 @@ if(isset($_POST['submit'])){
 						types[doc.type] = (types[doc.type] || 0) + 1;
 						return '<span class="dex-doc tone-' + docExpiryTone(doc) + '">'
 							+ '<span class="dex-doc-type">' + escapeDocExpiryHtml(doc.type) + '</span>'
-							+ '<span class="dex-doc-date"><i class="mdi mdi-calendar"></i> ' + escapeDocExpiryHtml(doc.expiry) + '</span>'
+							+ '<span class="dex-doc-date"><i class="fa fa-calendar"></i> ' + escapeDocExpiryHtml(doc.expiry) + '</span>'
 							+ '<span class="dex-doc-days">' + escapeDocExpiryHtml(formatDocDays(doc)) + '</span>'
 							+ '</span>';
 					}).join('');
@@ -1513,7 +1645,7 @@ if(isset($_POST['submit'])){
 						+ '</div></div>'
 						+ '<div class="dex-docs">' + docsHtml + '</div>'
 						+ '<a href="' + viewUrl + '" class="dex-view" target="_blank" rel="noopener" title="<?= getDisplayName('View Employee') ?>">'
-						+ '<i class="mdi mdi-eye"></i><span><?= getDisplayName('View') ?></span></a>'
+						+ '<i class="fa fa-eye"></i><span><?= getDisplayName('View') ?></span></a>'
 						+ '</div>';
 				}).join('');
 
@@ -1522,19 +1654,35 @@ if(isset($_POST['submit'])){
 						return '<button type="button" class="dex-chip" data-type="' + escapeDocExpiryHtml(t) + '">' + escapeDocExpiryHtml(t) + ' <span>' + types[t] + '</span></button>';
 					}).join('');
 
+				// Stat tiles: [tone, icon, label, value, sub-line left, sub-line right, bar % (null = no bar)]
+				var levelTone = level === 'danger' ? 'red' : (level === 'warning' ? 'amber' : 'sky');
+				var activeCount = docCount - expiredCount;
+				var pctOf = function(n) { return docCount > 0 ? Math.round(n / docCount * 1000) / 10 : 0; };
+				var perEmp = rows.length ? (docCount / rows.length).toFixed(1) : '0';
+				var statTiles = [
+					['indigo', 'fa-users', '<?= getDisplayName('Employees') ?>', rows.length, '<?= getDisplayName('With expiring documents') ?>', '', null],
+					[levelTone, 'fa-file-lines', '<?= getDisplayName('Documents') ?>', docCount, '<?= getDisplayName('Per employee') ?>', perEmp, null],
+					[expiredCount > 0 ? 'red' : 'green', expiredCount > 0 ? 'fa-circle-exclamation' : 'fa-circle-check', '<?= getDisplayName('Expired') ?>', expiredCount,
+						expiredCount > 0 ? '<?= getDisplayName('Of documents') ?>' : '<?= getDisplayName('All still valid') ?>', (expiredCount > 0 ? pctOf(expiredCount) : pctOf(activeCount)) + '%', expiredCount > 0 ? pctOf(expiredCount) : pctOf(activeCount)]
+				];
+				var statsHtml = statTiles.map(function(t) {
+					return '<div class="dex-stat' + (t[0] === 'indigo' ? '' : ' is-' + t[0]) + '">'
+						+ '<div class="dex-stat-top"><span class="dex-stat-icon"><i class="fa ' + t[1] + '"></i></span>'
+						+ '<div class="dex-stat-text"><span class="dex-stat-label">' + t[2] + '</span><span class="dex-stat-value">' + t[3] + '</span></div></div>'
+						+ (t[6] !== null ? '<div class="dex-stat-bar"><span style="width:' + t[6] + '%"></span></div>' : '')
+						+ '<div class="dex-stat-sub"><span>' + t[4] + '</span><b>' + t[5] + '</b></div>'
+						+ '</div>';
+				}).join('');
+
 				return ''
 					+ '<div class="dex-wrap">'
-					+ '<div class="dex-stats">'
-					+ '<div class="dex-stat"><span class="dex-stat-label"><?= getDisplayName('Employees') ?></span><span class="dex-stat-value">' + rows.length + '</span></div>'
-					+ '<div class="dex-stat"><span class="dex-stat-label"><?= getDisplayName('Documents') ?></span><span class="dex-stat-value">' + docCount + '</span></div>'
-					+ '<div class="dex-stat tone-red"><span class="dex-stat-label"><?= getDisplayName('Expired') ?></span><span class="dex-stat-value">' + expiredCount + '</span></div>'
-					+ '</div>'
+					+ '<div class="dex-stats">' + statsHtml + '</div>'
 					+ '<div class="dex-tools">'
-					+ '<div class="dex-search"><i class="mdi mdi-magnify"></i><input type="search" id="dexSearch" placeholder="<?= getDisplayName('Search name, ID, department...') ?>" autocomplete="off"></div>'
+					+ '<div class="dex-search"><i class="fa fa-magnifying-glass"></i><input type="search" id="dexSearch" placeholder="<?= getDisplayName('Search name, ID, department...') ?>" autocomplete="off"></div>'
 					+ '<div class="dex-chips">' + typeChips + '</div>'
 					+ '</div>'
 					+ '<div class="dex-list" id="dexList">' + cards
-					+ '<div class="dex-empty" id="dexNoMatch" style="display:none;"><i class="mdi mdi-magnify-minus"></i><?= getDisplayName('No matching employees.') ?></div>'
+					+ '<div class="dex-empty" id="dexNoMatch" style="display:none;"><i class="fa fa-magnifying-glass-minus"></i><?= getDisplayName('No matching employees.') ?></div>'
 					+ '</div>'
 					+ '</div>';
 			}
@@ -1717,7 +1865,7 @@ if(isset($_POST['submit'])){
 				var level = $(this).data('level');
 				var tone = level === 'danger' ? 'red' : (level === 'warning' ? 'amber' : 'sky');
 				Swal.fire({
-					title: '<span class="dex-title"><span class="dex-title-icon tone-' + tone + '"><i class="mdi mdi-file-document"></i></span>' + getDocExpiryTitle(level) + '</span>',
+					title: '<span class="dex-title"><span class="dex-title-icon tone-' + tone + '"><i class="fa fa-file-shield"></i></span>' + getDocExpiryTitle(level) + '</span>',
 					html: buildDocExpiryListHtml(level),
 					width: '1000px',
 					customClass: { popup: 'dex-popup' },
@@ -1728,15 +1876,6 @@ if(isset($_POST['submit'])){
 				});
 			});
 
-		// Initialize Allowed Employees Badge Card
-		$(document).ready(function() {
-			var employeeNames = '<?= htmlspecialchars($allowed_employee_names ?? '', ENT_QUOTES, 'UTF-8') ?>';
-			var container = $('#allowed-employees-container');
-			if (container.length && typeof renderAllowedEmployeesCard === 'function') {
-				var badgeHTML = renderAllowedEmployeesCard(employeeNames);
-				container.html(badgeHTML);
-			}
-		});
 
         </script>
 

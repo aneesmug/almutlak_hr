@@ -45,8 +45,13 @@ if (!function_exists('app_sr_table_scroll_tag')) {
         $digits = ($lang === 'ar' || !empty($GLOBALS['is_rtl']))
             ? '<script src="' . $prefix . 'assets/js/sr_arabic_digits.js?v=' . (int) @filemtime($base . '/assets/js/sr_arabic_digits.js') . '" data-digits="' . (APP_ARABIC_NUMBERS ? '1' : '0') . '"></script>'
             : '';
-        return '<script src="' . $prefix . 'assets/js/sr_table_scroll.js?v=' . (int) @filemtime($base . '/assets/js/sr_table_scroll.js') . '"></script>'
+        // KPI / stat tile numbers count up on every page (assets/js/sr_count_up.js).
+        // Skeleton loader for page load / navigation / DataTables AJAX (assets/js/sr_skeleton.js).
+        return '<link rel="stylesheet" href="' . $prefix . 'assets/css/sr_skeleton.css?v=' . (int) @filemtime($base . '/assets/css/sr_skeleton.css') . '">'
+            . '<script src="' . $prefix . 'assets/js/sr_skeleton.js?v=' . (int) @filemtime($base . '/assets/js/sr_skeleton.js') . '"></script>'
+            . '<script src="' . $prefix . 'assets/js/sr_table_scroll.js?v=' . (int) @filemtime($base . '/assets/js/sr_table_scroll.js') . '"></script>'
             . $digits
+            . '<script src="' . $prefix . 'assets/js/sr_count_up.js?v=' . (int) @filemtime($base . '/assets/js/sr_count_up.js') . '"></script>'
             . app_sr_swal_theme_tags($prefix);
     }
 }

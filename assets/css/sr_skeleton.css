@@ -1,0 +1,114 @@
+/*
+ * Skeleton loader (assets/js/sr_skeleton.js) - injected on every page by
+ * includes/app_datepicker_head.php.
+ */
+:root {
+    --sk-base: #e4e8ee;
+    --sk-shine: #f4f6f9;
+    --sk-card: #ffffff;
+    --sk-border: #e9edf2;
+    --sk-accent: #4f6ef7;
+}
+html.app-dark {
+    --sk-base: #252b36;
+    --sk-shine: #313949;
+    --sk-card: #1b2029;
+    --sk-border: #2a313d;
+    --sk-accent: #7c93ff;
+}
+
+@keyframes srSkShine { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes srSkFailsafe { to { opacity: 1; visibility: visible; } }
+@keyframes srSkFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes srSkTopbar {
+    0% { transform: translateX(-100%) scaleX(.3); }
+    50% { transform: translateX(10%) scaleX(.6); }
+    100% { transform: translateX(110%) scaleX(.3); }
+}
+
+/* One shimmering block. background-attachment: fixed keeps every block's sweep in step. */
+.sr-sk-b {
+    display: block;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--sk-base) 0%, var(--sk-base) 35%, var(--sk-shine) 50%, var(--sk-base) 65%, var(--sk-base) 100%);
+    background-size: 300% 100%;
+    background-attachment: fixed;
+    animation: srSkShine 1.4s linear infinite;
+}
+
+/* ---- Page skeleton (content area only - sidebar and topbar stay usable) ---- */
+html.sr-sk-on .content-page > .content > :not(.sr-sk) {
+    opacity: 0;
+    visibility: hidden;
+    /* Fail-safe: content shows after 6s even if the script never clears the flag. */
+    animation: srSkFailsafe 0s 6s forwards;
+}
+html.sr-sk-done .content-page > .content > :not(.sr-sk) {
+    animation: srSkFadeIn .25s ease-out both;
+}
+.sr-sk { display: none; }
+html.sr-sk-on .sr-sk { display: block; padding: 4px 0 20px; }
+
+.sr-sk-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 6px 0 20px; }
+.sr-sk-head > div { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.sr-sk-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; }
+.sr-sk-card {
+    background: var(--sk-card);
+    border: 1px solid var(--sk-border);
+    border-radius: 14px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.sr-sk-tile { flex-direction: row; align-items: flex-start; justify-content: space-between; }
+.sr-sk-tile > div { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.sr-sk-icon { width: 42px; height: 42px; border-radius: 12px; flex: 0 0 auto; }
+.sr-sk-toolbar { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.sr-sk-row { display: grid; grid-template-columns: 2fr 3fr 2fr 2fr 1.2fr; gap: 18px; align-items: center; padding: 12px 0; border-top: 1px solid var(--sk-border); }
+.sr-sk-row:first-of-type { border-top: 0; }
+.sr-sk-row.is-head .sr-sk-b { height: 10px; opacity: .7; }
+
+.sr-sk .h-6 { height: 6px; } .sr-sk .h-10 { height: 10px; } .sr-sk .h-12 { height: 12px; }
+.sr-sk .h-22 { height: 22px; } .sr-sk .h-26 { height: 26px; } .sr-sk .h-34 { height: 34px; }
+.sr-sk .w-15 { width: 15%; } .sr-sk .w-25 { width: 25%; } .sr-sk .w-30 { width: 30%; }
+.sr-sk .w-40 { width: 40%; } .sr-sk .w-55 { width: 55%; } .sr-sk .w-60 { width: 60%; }
+.sr-sk .w-70 { width: 70%; } .sr-sk .w-85 { width: 85%; } .sr-sk .w-100 { width: 100%; }
+.sr-sk-btn { width: 130px; height: 36px; border-radius: 10px; }
+
+@media (max-width: 991px) { .sr-sk-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575px) {
+    .sr-sk-tiles { grid-template-columns: minmax(0, 1fr); }
+    .sr-sk-row { grid-template-columns: 2fr 3fr 2fr; }
+    .sr-sk-row > :nth-child(n+4) { display: none; }
+    .sr-sk-btn { display: none; }
+}
+
+/* Thin progress line under the top edge while the next page is requested. */
+.sr-sk-topbar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 100000; overflow: hidden; pointer-events: none; display: none; }
+.sr-sk-topbar::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--sk-accent), transparent); animation: srSkTopbar 1.1s ease-in-out infinite; transform-origin: left; }
+html.sr-sk-nav .sr-sk-topbar { display: block; }
+
+/* ---- DataTables: skeleton rows while the first AJAX page loads ---- */
+tr.sr-sk-tr td { padding-top: 14px !important; padding-bottom: 14px !important; border-color: var(--sk-border) !important; background: transparent !important; }
+tr.sr-sk-tr .sr-sk-b { height: 12px; min-width: 48px; }
+table.sr-sk-busy > tbody { opacity: .45; transition: opacity .15s; }
+
+/* ---- Stat values still showing a placeholder ("–") ---- */
+.sr-sk-inline {
+    display: inline-block !important;
+    min-width: 2.2em;
+    height: .9em;
+    vertical-align: middle;
+    color: transparent !important;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--sk-base) 0%, var(--sk-base) 35%, var(--sk-shine) 50%, var(--sk-base) 65%, var(--sk-base) 100%);
+    background-size: 300% 100%;
+    background-attachment: fixed;
+    animation: srSkShine 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sr-sk-b, .sr-sk-inline, .sr-sk-topbar::before { animation: none; }
+    html.sr-sk-done .content-page > .content > :not(.sr-sk) { animation: none; }
+}
