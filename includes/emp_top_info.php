@@ -253,7 +253,7 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 
 		// Edit Employee (system admin, dept hr, or 'access_edit_employee' special access grant)
 		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) {
-			$ma['manage'][] = "<div class=\"menu-item text-primary\" onclick=\"window.location.href='edit_employee.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
+			$ma['manage'][] = "<div class=\"menu-item text-primary\" data-edit-employee=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
 		}
 
 		// Add Note (system admin, dept hr, or 'access_edit_employee' special access grant)
@@ -321,7 +321,7 @@ if ($emprow['status'] == 1) {
 		$maDraft[] = "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
 	}
 	if (!in_array($current_page_name, ["edit_employee.php"]) && !empty($can_modify_employee)) {
-		$maDraft[] = "<div class=\"menu-item text-primary\" onclick=\"window.location.href='edit_employee.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
+		$maDraft[] = "<div class=\"menu-item text-primary\" data-edit-employee=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
 		$maDraft[] = "<div class=\"menu-item text-info addnote\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-book-user\"></i><span>" . __('note') . "</span></div>";
 	}
 	$moreActionsHtml = '<div class="ma-empty" style="padding-bottom:8px;"><i class="fa fa-file-pen"></i><p>' . __('employee_is_draft', 'This employee is in Draft. Change status to Active from Edit Employee to enable all actions.') . '</p></div>';
@@ -526,10 +526,13 @@ if ($isEmployee !== true) {
 			.emp-actbar .eab-btn-primary:hover { background: #4f46e5; border-color: #4f46e5; }
 			.emp-actbar .eab-btn-danger { background: #dc2626; border-color: #dc2626; color: #fff !important; }
 			.emp-actbar .eab-btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+			.emp-actbar .eab-btn-success { background: #16a34a; border-color: #16a34a; color: #fff !important; }
+			.emp-actbar .eab-btn-success:hover { background: #15803d; border-color: #15803d; }
 			html.app-dark .emp-actbar .eab-btn { background: var(--ad-surface, #161c2a); border-color: var(--ad-border, #2a3348); color: var(--ad-text, #d8dee9); box-shadow: none; }
 			html.app-dark .emp-actbar .eab-btn:hover { border-color: #818cf8; color: #a5b4fc; }
 			html.app-dark .emp-actbar .eab-btn-primary { background: #6366f1; border-color: #6366f1; color: #fff !important; }
 			html.app-dark .emp-actbar .eab-btn-danger { background: #dc2626; border-color: #dc2626; color: #fff !important; }
+			html.app-dark .emp-actbar .eab-btn-success { background: #16a34a; border-color: #16a34a; color: #fff !important; }
 			@media (max-width: 575px) { .emp-actbar .eab-btn { flex: 1 1 auto; } }
 		</style>
 		<div class="emp-actbar">
@@ -545,6 +548,19 @@ if ($isEmployee !== true) {
 						<a href="javascript:void(0);" class="eab-btn eab-btn-primary updateSalaryBtn" data-emp_id="<?= $emprow['empid'] ?>" data-basic="<?= $emprow['basic'] ?>" data-housing="<?= $emprow['housing'] ?>" data-transport="<?= $emprow['transport'] ?>" data-food="<?= $emprow['food'] ?? 0 ?>" data-misc="<?= $emprow['misc'] ?? 0 ?>" data-cashier="<?= $emprow['cashier'] ?? 0 ?>" data-fuel="<?= $emprow['fuel'] ?? 0 ?>" data-tel="<?= $emprow['tel'] ?? 0 ?>" data-other="<?= $emprow['other'] ?? 0 ?>" data-guard="<?= $emprow['guard'] ?? 0 ?>"><i class="mdi mdi-cash-multiple"></i> <?= __('update_salary') ?></a>
 					<?php endif ?>
 				<?php elseif ((string)$emprow["status"] === "0"): ?>
+					<?php
+					// Reactivate = Edit Employee modal, status switch -> Active / Draft. An employee who left
+					// through End of Service is re-hired there instead (new joining date - includes/eos_rehire.php).
+					require_once __DIR__ . '/eos_rehire.php';
+					$ehEos = eos_latest_record($conDB, (string)$emprow['empid']);
+					$ehIsRehire = $ehEos !== null;
+					$ehRehiredAs = $ehEos && !empty($ehEos['rehired_emp_id']) ? (string)$ehEos['rehired_emp_id'] : '';
+					?>
+					<?php if ($ehRehiredAs !== ''): ?>
+						<a href="view_employee.php?emp_id=<?= urlencode($ehRehiredAs) ?>" class="eab-btn eab-btn-success"><i class="mdi mdi-account-arrow-right"></i> <?= str_replace('{emp_id}', htmlspecialchars($ehRehiredAs), __('rehired_as_open', 'Re-hired as #{emp_id}')) ?></a>
+					<?php elseif (!empty($can_modify_employee)): ?>
+						<a href="edit_employee.php?emp_id=<?= urlencode((string)$emprow['empid']) ?>" data-edit-employee="<?= htmlspecialchars((string)$emprow['empid']) ?>" class="eab-btn eab-btn-success"><i class="mdi <?= $ehIsRehire ? 'mdi-account-plus' : 'mdi-account-check' ?>"></i> <?= $ehIsRehire ? __('rehire_employee', 'Re-hire Employee') : __('reactivate_employee', 'Reactivate Employee') ?></a>
+					<?php endif ?>
 					<a href="./end_of_service_print.php?emp_id=<?= $emprow['empid']; ?>" target="_blank" class="eab-btn eab-btn-danger"><i class="mdi mdi-printer"></i> <?= __('print_end_of_service') ?></a>
 				<?php endif ?>
 			</div>

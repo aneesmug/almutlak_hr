@@ -138,7 +138,7 @@ $card_display_name = getDisplayName($name);
                     <a href="javascript:void(0);" class="dropdown-toggle arrow-none" data-toggle="dropdown" aria-expanded="false" title="<?= __('actions') ?>"><i class="fa fa-ellipsis-v"></i></a>
                     <div class="dropdown-menu dropdown-menu-right">
                         <?php if ($card_can_edit): ?>
-                            <a class="dropdown-item" href="edit_employee.php?emp_id=<?= urlencode((string)$emp_id) ?>"><i class="fa fa-pen-to-square mr-2"></i><?= __('edit') ?></a>
+                            <a class="dropdown-item" href="edit_employee.php?emp_id=<?= urlencode((string)$emp_id) ?>" data-edit-employee="<?= htmlspecialchars((string)$emp_id) ?>"><i class="fa fa-pen-to-square mr-2"></i><?= __('edit') ?></a>
                         <?php endif; ?>
                         <a class="dropdown-item text-danger deleteAjax" href="javascript:void(0);" data-id="<?= (int)$id ?>" data-tbl="employee" data-file="0"><i class="fa fa-trash-alt mr-2"></i><?= __('delete') ?></a>
                     </div>
@@ -181,7 +181,7 @@ $card_display_name = getDisplayName($name);
             <div class="sr-emp-actions">
                 <a href="<?= htmlspecialchars($card_view_url) ?>" class="sr-btn sr-btn-primary sr-btn-sm sr-emp-view"><?= __('view_details') ?> <i class="fa fa-arrow-right"></i></a>
                 <?php if ($card_can_edit): ?>
-                    <a href="edit_employee.php?emp_id=<?= urlencode((string)$emp_id) ?>" class="sr-btn sr-btn-sm sr-btn-icon" title="<?= __('edit') ?>"><i class="fa fa-pen-to-square"></i></a>
+                    <a href="edit_employee.php?emp_id=<?= urlencode((string)$emp_id) ?>" data-edit-employee="<?= htmlspecialchars((string)$emp_id) ?>" class="sr-btn sr-btn-sm sr-btn-icon" title="<?= __('edit') ?>"><i class="fa fa-pen-to-square"></i></a>
                 <?php endif; ?>
             </div>
         </div>

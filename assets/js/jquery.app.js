@@ -122,6 +122,8 @@ loadResource('./assets/js/geolocation-capture.js', 'js', { async: true, defer: t
 loadResource('./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./plugins/autoNumeric/autoNumeric.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/newEmployeeModal.js', 'js', { defer: true }, 'head');
+// "Edit Employee" SweetAlert2 modal (uses the newEmp* field helpers above at click time)
+loadResource('./assets/js/editEmployeeModal.js', 'js', { defer: true }, 'head');
 
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.
