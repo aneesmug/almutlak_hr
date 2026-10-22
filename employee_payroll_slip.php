@@ -11,7 +11,9 @@ $DateConv = new Hijri_GregorianConvert;
 $format = "YYYY-MM-DD";
 
 // Get employee ID securely from session
-$emp_id = $_SESSION['empid'] ?? ($empid ?? null);
+// ?emp_id=X opens another employee's records (from their profile) - access-checked in profile_target.php.
+require_once __DIR__ . '/includes/profile_target.php';
+$emp_id = $profile_target_empid;
 if (empty($emp_id)) {
     header("Location: ./profile.php");
     exit();
@@ -263,7 +265,7 @@ $all_payrolls = $stmt->get_result();
                                 </div>
                                 <div class="col-sm-4 text-<?= $is_rtl ? 'left' : 'right' ?>">
                                     <div class="btn-group" role="group">
-                                        <a href="profile.php" class="btn btn-sm btn-secondary">
+                                        <a href="profile.php<?= !empty($is_viewing_other_employee) ? '?emp_id=' . urlencode((string)$emp_id) : '' ?>" class="btn btn-sm btn-secondary">
                                             <i class="fa fa-arrow-<?= $is_rtl ? 'right' : 'left' ?>"></i> <?= __('back', 'Back') ?>
                                         </a>
                                         <a href="generate_payroll_pdf.php?emp_id=<?= $emp_id ?>&month=<?= $month ?>&year=<?= $year ?>" class="btn btn-sm btn-info">

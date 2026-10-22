@@ -459,7 +459,7 @@ try {
             if (!$ctcHasAccess) {
                 throw new Exception('Unauthorized: CTC report requires elevated access');
             }
-            $result = generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
+            $result = generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $employeeId, $companies, $countries, $dateTo);
             break;
         case 'custom':
             $customTables = isset($_POST['customTables']) ? $_POST['customTables'] : [];
@@ -1651,7 +1651,7 @@ function ctc_report_get_vacation_balance_snapshot($conDB, $empId) {
 
 // Builds the full CTC field set (keyed by emp_id) for every employee matching $whereClause.
 // Shared by the CTC report and the Employee report so both compute cost figures identically.
-function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
+function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance, $eosAsOf = null) {
     global $is_rtl;
 
     $sql = "SELECT
@@ -1737,7 +1737,7 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
 
         $eosAmount = 0.0;
         if ($needsEos) {
-            $eos = calculate_current_eos_estimate($conDB, $srcRow['emp_id'], $srcRow['joining_date']);
+            $eos = calculate_current_eos_estimate($conDB, $srcRow['emp_id'], $srcRow['joining_date'], $eosAsOf);
             $eosAmount = $eos['success'] ? $eos['eos_amount'] : 0.0;
         }
 
@@ -1817,8 +1817,18 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
     return $rows;
 }
 
-function generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
+function generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = [], $eosAsOf = '') {
     global $is_rtl;
+
+    // EOS is accrued from the joining date until the selected "EOS as of" date (Date To), or today
+    $eosAsOfDate = null;
+    if (trim((string)$eosAsOf) !== '') {
+        $ts = strtotime((string)$eosAsOf);
+        if ($ts === false) {
+            throw new Exception('Invalid EOS date');
+        }
+        $eosAsOfDate = date('Y-m-d', $ts);
+    }
 
     $where = ['e.status = 1'];
 
@@ -1853,10 +1863,14 @@ function generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $user
     $data = [];
     $headers = [];
     foreach ($columns as $col) {
-        $headers[] = getColumnLabel($col);
+        $label = getColumnLabel($col);
+        if ($col === 'eos_until_today') {
+            $label = __('eos_until_date', 'EOS (Until)') . ' ' . date('d M Y', strtotime($eosAsOfDate ?? 'today'));
+        }
+        $headers[] = $label;
     }
 
-    foreach (ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) as $row) {
+    foreach (ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance, $eosAsOfDate) as $row) {
         $filteredRow = [];
         foreach ($columns as $col) {
             $filteredRow[$col] = $row[$col] ?? '';

@@ -217,6 +217,12 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 			$ma['manage'][] = "<div class=\"menu-item text-dark createUserDeptAjax\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-shield\"></i><span>" . __('create_login') . "</span></div>";
 		}
 
+		// Employee Profile - the employee's own self-service profile page (profile.php), read-only for
+		// the viewer; profile.php re-checks access with canEmployeeSupervisorAccess().
+		if ($current_page_name !== 'profile.php') {
+			$ma['manage'][] = "<div class=\"menu-item text-info\" onclick=\"window.open('profile.php?emp_id=" . rawurlencode((string)$emprow['empid']) . "', '_blank')\" role=\"button\"><i class=\"fa fa-id-badge\"></i><span>" . __('employee_profile', 'Employee Profile') . "</span></div>";
+		}
+
 		// Edit Employee (system admin, dept hr, or 'access_edit_employee' special access grant)
 		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) {
 			$ma['manage'][] = "<div class=\"menu-item text-primary\" onclick=\"window.location.href='edit_employee.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";

@@ -12,7 +12,9 @@ $DateConv = new Hijri_GregorianConvert;
 $format = "YYYY-MM-DD";
 
 // Get employee ID securely from session
-$emp_id = $_SESSION['empid'] ?? ($empid ?? null);
+// ?emp_id=X opens another employee's records (from their profile) - access-checked in profile_target.php.
+require_once __DIR__ . '/includes/profile_target.php';
+$emp_id = $profile_target_empid;
 if (empty($emp_id)) {
     header("Location: ./profile.php");
     exit();

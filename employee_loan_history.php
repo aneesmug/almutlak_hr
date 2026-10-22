@@ -12,8 +12,9 @@ $DateConv = new Hijri_GregorianConvert;
 $format = "YYYY-MM-DD";
 
 // Get employee ID from the page link first, then fall back to the session employee.
-$emp_id = $_GET['emp_id'] ?? ($_SESSION['empid'] ?? ($empid ?? null));
-$emp_id = is_string($emp_id) ? trim($emp_id) : $emp_id;
+// ?emp_id=X opens another employee's records (from their profile) - access-checked in profile_target.php.
+require_once __DIR__ . '/includes/profile_target.php';
+$emp_id = $profile_target_empid;
 if (empty($emp_id)) {
     header("Location: ./profile.php");
     exit();

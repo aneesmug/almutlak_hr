@@ -17,7 +17,9 @@ $DateConv = new Hijri_GregorianConvert;
 $format = "YYYY-MM-DD";
 
 // Get employee ID and date parameters
-$emp_id = $_SESSION['empid'] ?? ($_GET['emp_id'] ?? null);
+// ?emp_id=X = another employee's slip (from their profile records) - access-checked in profile_target.php.
+require_once __DIR__ . '/includes/profile_target.php';
+$emp_id = $profile_target_empid;
 $month = isset($_GET['month']) ? $_GET['month'] : date('m');
 $year = isset($_GET['year']) ? $_GET['year'] : date('Y');
 

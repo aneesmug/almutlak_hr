@@ -14,7 +14,9 @@ $DateConv = new Hijri_GregorianConvert;
 $format = "YYYY-MM-DD";
 
 // Get employee ID securely from session
-$emp_id = $_SESSION['empid'] ?? ($empid ?? null);
+// ?emp_id=X opens another employee's records (from their profile) - access-checked in profile_target.php.
+require_once __DIR__ . '/includes/profile_target.php';
+$emp_id = $profile_target_empid;
 if (empty($emp_id)) {
     header("Location: ./profile.php");
     exit();
@@ -102,7 +104,7 @@ if (!$evaluations) {
 
         $actions = '<div class="sr-actions">'
             . '<button type="button" class="sr-open-btn view-eval-details" data-id="' . (int)$eval['id'] . '"><i class="mdi mdi-eye"></i> ' . sr_h(__('view_details', 'View Details')) . '</button>';
-        if ($ack === 'pending') {
+        if ($ack === 'pending' && empty($is_viewing_other_employee)) {
             $actions .= '<button type="button" class="sr-btn sr-btn-sm sr-btn-success acknowledge-eval" data-id="' . (int)$eval['id'] . '" data-manager-name="' . sr_h($eval['manager_name']) . '" title="' . sr_h(__('acknowledge_evaluation', 'Acknowledge Evaluation')) . '"><i class="mdi mdi-check-circle"></i> ' . sr_h(__('acknowledge', 'Acknowledge')) . '</button>'
                 . '<button type="button" class="sr-btn sr-btn-sm sr-btn-danger object-eval" data-id="' . (int)$eval['id'] . '" data-manager-name="' . sr_h($eval['manager_name']) . '" title="' . sr_h(__('object_to_evaluation', 'Object to Evaluation')) . '"><i class="mdi mdi-close-circle"></i> ' . sr_h(__('object', 'Object')) . '</button>';
         }

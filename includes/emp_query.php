@@ -11,6 +11,8 @@
  ********************************************************************************************************************/
 
 	$empidget = (isset($_GET['emp_id'])? $_GET['emp_id'] : $_SESSION['empid']);
+	// Interpolated into the SQL below - anything but a plain numeric ID matches no employee.
+	$empidget = ctype_digit((string)$empidget) ? (string)$empidget : '0';
 
     $get_emp_data = mysqli_query($conDB, "SELECT 
 		`employees`.*, 

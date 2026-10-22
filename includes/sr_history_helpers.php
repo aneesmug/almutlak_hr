@@ -227,6 +227,10 @@ if (!function_exists('srh_emp_hero')) {
 if (!function_exists('srh_profile_url')) {
     function srh_profile_url(array $emprow)
     {
+        // Viewing another employee's records (includes/profile_target.php) -> back to their profile
+        if (!empty($GLOBALS['is_viewing_other_employee'])) {
+            return 'profile.php?emp_id=' . urlencode((string)($emprow['emp_id'] ?? ''));
+        }
         return 'profile.php?hashcode=' . urlencode((string)($emprow['emp_id'] ?? '')) . '&verification=' . urlencode((string)($emprow['id'] ?? ''));
     }
 }

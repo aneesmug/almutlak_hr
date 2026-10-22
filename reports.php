@@ -2695,6 +2695,12 @@ if (mysqli_num_rows($query) == 1) {
                         $('label[for="dateTo"]').html('<?= __('last_working_day') ?> <span class="text-danger">*</span>');
                         $('#dateTo').attr('placeholder', '<?= __('select_last_working_day') ?>');
                         $('#dateFrom').closest('.col-md-4').hide(); // Hide date from for EOS
+                    } else if (reportType === 'ctc') {
+                        // CTC: EOS is accrued from joining date until this date (empty = today)
+                        $('label[for="dateFrom"]').html('<?= __('date_from') ?>');
+                        $('label[for="dateTo"]').html('<?= __('eos_as_of_date', 'EOS as of date') ?> <small class="text-muted">(<?= __('empty_means_today', 'empty = today') ?>)</small>');
+                        $('#dateTo').attr('placeholder', '<?= __('today', 'Today') ?>');
+                        $('#dateFrom').val('').closest('.col-md-4').hide();
                     } else if (reportType === 'terminated_employees') {
                         // For Exit Settlement report, show date range for filtering
                         $('label[for="dateFrom"]').html('<?= __('exit_from_date') ?: 'Exit From Date' ?>');
@@ -2748,7 +2754,7 @@ if (mysqli_num_rows($query) == 1) {
                         $('#customDateToFilter').hide();
                         // Show global date filters for non-custom reports
                         // For EOS report, only show dateTo (Last Working Day)
-                        if (reportType === 'eos') {
+                        if (reportType === 'eos' || reportType === 'ctc') {
                             $('#dateFrom').closest('.col-md-4, .form-group').hide();
                             $('#dateTo').closest('.col-md-4, .form-group').show();
                         } else if (reportType === 'payroll') {

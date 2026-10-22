@@ -9,12 +9,18 @@ include("./includes/Hijri_GregorianConvert.php");
 $DateConv = new Hijri_GregorianConvert;
 $format = "YYYY-MM-DD";
 
+// Access check for ?emp_id=X (another employee) - must run before emp_query.php reads it.
+require_once("./includes/profile_target.php");
 require("./includes/emp_query.php");
 $emprow = mysqli_fetch_assoc($get_emp_data);
 
 if (!$emprow) {
     die("Employee data not found.");
 }
+
+// profile.php?emp_id=X (opened from the employee master's More Actions) is read-only for the
+// viewer: self-service actions and "My Pages" stay with the employee.
+$isViewingOtherProfile = $is_viewing_other_employee;
 
 // Insurance No / Expiry / Class are yearly-renewed - fetch the current active record from
 // employee_medical_insurance.
@@ -105,7 +111,9 @@ $isBusinessTripBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck
 $moreActionsHtml = '';
 // Collected per section, rendered as titled tile groups below (same look as view_employee.php's More Actions)
 $ma = ['requests' => [], 'vacation' => [], 'account' => [], 'exit' => []];
-if ($emprow['status'] == 1) {
+if ($isViewingOtherProfile) {
+    $moreActionsHtml .= '<div class="ma-empty"><i class="fa fa-eye"></i><p>' . __('profile_read_only_view', "You are viewing another employee's profile. Requests can only be made by the employee or from the employee master page.") . '</p></div>';
+} elseif ($emprow['status'] == 1) {
     $ma['account'][] = "<a href=\"javascript:void(0);\" class=\"menu-item text-purple\" onclick=\"window.location.href='./system_guide.php'\"><i class=\"fa fa-book-open-lines\"></i><span>" . __('system_guide') . "</span></a>";
     // Sequence below mirrors includes/emp_top_info.php's More Actions order
     // (Loan -> Vacation -> Excuse Leave -> Rejoin -> Edit -> Resignation), limited
@@ -147,8 +155,8 @@ $moreActionsHtml .= ma_group('requests', 'fa-file-signature', __('ma_group_reque
     . ma_group('vacation', 'fa-umbrella-beach', __('ma_group_vacation', 'Vacation & Travel'), $ma['vacation'])
     . ma_group('account', 'fa-user-gear', __('ma_group_my_account', 'My Account'), $ma['account'])
     . ma_group('exit', 'fa-door-open', __('ma_group_exit', 'Exit & Separation'), $ma['exit']);
-// Sign out: full-width row under the groups
-$moreActionsHtml .= "<div class=\"ma-footer\"><a href=\"javascript:void(0);\" class=\"menu-item signout text-secondary\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a></div>";
+// Sign out: full-width row under the groups (own profile only)
+if (!$isViewingOtherProfile) $moreActionsHtml .= "<div class=\"ma-footer\"><a href=\"javascript:void(0);\" class=\"menu-item signout text-secondary\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a></div>";
 
 // Build "My Pages" menu (same SweetAlert2 menu pattern as More Actions) - lists only the
 // pages this specific employee was granted via app_settings -> Special Access
@@ -196,7 +204,8 @@ foreach ($grantedPageLinks as $accessKey => $pageInfo) {
         $grantedPagesHtml .= $pageTile($pageInfo['file'], $pageInfo['color'] ?? 'primary', $pageInfo['icon'], $pageInfo['label']);
     }
 }
-$hasGrantedPages = ($grantedPagesHtml !== '');
+// My Pages = pages granted to this employee themself - not shown to someone viewing their profile
+$hasGrantedPages = ($grantedPagesHtml !== '') && !$isViewingOtherProfile;
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>

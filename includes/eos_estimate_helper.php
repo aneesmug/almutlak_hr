@@ -14,7 +14,8 @@ if (!function_exists('calculate_current_eos_estimate')) {
      * statutory base reward (before any resignation-tier reduction under
      * Article 85) as an indicative "if terminated today" figure.
      */
-    function calculate_current_eos_estimate($conDB, $empId, $joiningDateStr) {
+    // $asOfDate (Y-m-d, optional): accrue until that date instead of today (CTC report "EOS as of").
+    function calculate_current_eos_estimate($conDB, $empId, $joiningDateStr, $asOfDate = null) {
         $result = [
             'success' => false,
             'eos_amount' => 0.0,
@@ -33,14 +34,15 @@ if (!function_exists('calculate_current_eos_estimate')) {
 
         try {
             $joiningDate = new DateTime($joiningDateStr);
-            $endDate = new DateTime('today');
+            $endDate = new DateTime(($asOfDate !== null && trim((string)$asOfDate) !== '') ? (string)$asOfDate : 'today');
+            $endDate->setTime(0, 0, 0);
         } catch (Exception $e) {
             $result['message'] = 'Invalid joining date.';
             return $result;
         }
 
         if ($joiningDate >= $endDate) {
-            $result['message'] = 'Joining date is not in the past.';
+            $result['message'] = 'Joining date is not before the EOS date.';
             return $result;
         }
 
