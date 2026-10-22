@@ -89,6 +89,15 @@ if (mysqli_num_rows($query) == 1) {
             }
         }
 
+        // Live search (name / emp id / mobile / iqama) - same fields as reg_employee.php
+        $search_term = trim((string)($_GET['search'] ?? ''));
+        if ($search_term !== '') {
+            $search_esc = mysqli_real_escape_string($conDB, $search_term);
+            $search_esc = addcslashes($search_esc, '%_');
+            $where_conditions[] = "(`name` LIKE '%{$search_esc}%' OR `emp_id` LIKE '%{$search_esc}%' OR `mobile` LIKE '%{$search_esc}%' OR `iqama` LIKE '%{$search_esc}%')";
+            $url_params['search'] = $search_term;
+        }
+
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -188,11 +197,20 @@ if (mysqli_num_rows($query) == 1) {
 
 
                 <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
 
+                        <div class="sr-card">
+                            <div class="sr-toolbar" style="border-bottom: 0;">
+                                <div class="sr-search" style="max-width: 560px;">
+                                    <i class="fa fa-search"></i>
+                                    <input type="search" id="searchFilter" placeholder="<?= __('search_by_name_id_mobile_iqama_id') ?>..." value="<?= htmlspecialchars($search_term); ?>" autocomplete="off" aria-label="<?= __('search_by_name_id_mobile_iqama_id') ?>">
+                                </div>
+                            </div>
+                        </div>
 
-                        <div class="row">
+                        <div id="feResults">
+                        <div class="row" id="feCards">
 
                             <?php
                             // --- Construct Final Queries ---
@@ -252,6 +270,9 @@ if (mysqli_num_rows($query) == 1) {
                             ?>
                                 <?php include("./includes/employee_card.php"); ?>
                             <?php } ?>
+                            <?php if (mysqli_num_rows($query) === 0): ?>
+                                <div class="col-12"><div class="sr-card" style="padding: 30px; text-align: center; color: #64748b;"><i class="fa fa-users-slash" style="font-size: 26px; display: block; margin-bottom: 8px; opacity: .6;"></i><?= __('no_employees_found', 'No employees found') ?></div></div>
+                            <?php endif; ?>
                         </div>
 
 
@@ -267,6 +288,7 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                             </div>
                         </div>
+                        </div><!-- /#feResults -->
                         <!-- end row -->
 
                     </div> <!-- container -->
@@ -304,6 +326,46 @@ if (mysqli_num_rows($query) == 1) {
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <script>
+            // Live search + pagination in place: re-fetch this page with ?search=&page= and swap #feResults
+            (function () {
+                var timer = null, xhr = null;
+                var $results = $('#feResults');
+                function load(url) {
+                    if (xhr) xhr.abort();
+                    $results.css({ opacity: 0.45, 'pointer-events': 'none', 'min-height': $results.outerHeight() + 'px' });
+                    xhr = $.get(url).done(function (html) {
+                        var $fresh = $('<div>').append($.parseHTML(html)).find('#feResults');
+                        if ($fresh.length) {
+                            $results.html($fresh.html());
+                            history.replaceState(null, '', url);
+                        }
+                    }).always(function () {
+                        $results.css({ opacity: 1, 'pointer-events': 'auto', 'min-height': '' });
+                    });
+                }
+                function searchUrl() {
+                    var u = new URL(window.location.href);
+                    var q = $('#searchFilter').val().trim();
+                    if (q) u.searchParams.set('search', q); else u.searchParams.delete('search');
+                    u.searchParams.delete('page');
+                    return u.toString();
+                }
+                $('#searchFilter').on('input', function () {
+                    clearTimeout(timer);
+                    timer = setTimeout(function () { load(searchUrl()); }, 350);
+                }).on('keypress', function (e) {
+                    if (e.key === 'Enter') { clearTimeout(timer); load(searchUrl()); }
+                });
+                $(document).on('click', '#feResults .pagination a', function (e) {
+                    var href = $(this).attr('href'), $li = $(this).closest('li');
+                    if (!href || href === '#' || href.indexOf('javascript') === 0) return;
+                    e.preventDefault();
+                    if ($li.hasClass('disabled') || $li.hasClass('active')) return;
+                    load(new URL(href, window.location.href).toString());
+                });
+            })();
+        </script>
 
     </body>
 
