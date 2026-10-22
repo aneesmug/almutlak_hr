@@ -119,6 +119,8 @@
             // Fallback to salary components total if master salary is missing
             $employee_master_total_salary = $vacation_salary_base;
         }
+        // Components chosen in App Settings > Vacation Payroll (unchanged until that setting is saved)
+        $employee_master_total_salary = vacation_salary_monthly_base($salaryrow ?: [], $employee_master_total_salary);
 
         // Get the annual vacation entitlement directly from the employee's record.
         // Note: This field (`vacation_days`) stores the TOTAL period entitlement (e.g., 42 for 2 years)

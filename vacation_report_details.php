@@ -321,7 +321,8 @@ if (mysqli_num_rows($query) == 1) {
         // Formula: (daily rate × vacation days) = (total_monthly_salary / 30) × approved_days
         if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
             // Calculate vacation salary as daily rate × vacation days
-            $vacation_salary = round($daily_rate * $approved_days);
+            // Vacation days are paid on the components chosen in App Settings > Vacation Payroll
+            $vacation_salary = round(round(vacation_salary_monthly_base($salary, $total_monthly_salary) / $days_in_month, 2) * $approved_days);
             
             // Track salaries_earned for display purposes (how many full contract periods)
             $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;

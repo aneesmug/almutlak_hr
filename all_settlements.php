@@ -532,7 +532,8 @@ if ($canSeeAllDepts) {
                                                         
                                                         // Calculate vacation salary for deductible payable vacations with payroll type.
                                                         if ($is_settlement_payable_vacation && $vacation_salary_type === 'payroll') {
-                                                            $vacation_salary = round($daily_rate * $approved_days);
+                                                            // Vacation days are paid on the components chosen in App Settings > Vacation Payroll
+                                                            $vacation_salary = round(round(vacation_salary_monthly_base($settlement, $total_monthly_salary) / $days_in_month, 2) * $approved_days);
                                                         }
                                                         
                                                         // Calculate overtime

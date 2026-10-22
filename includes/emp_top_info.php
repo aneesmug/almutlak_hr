@@ -107,14 +107,16 @@ $canSeeVacDue = (
 	|| user_has_special_access($conDB, $empid ?? '', 'view_employee_vacation_due', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 );
 if ($canSeeVacDue && $emprow['status'] == 1 && !empty($empid_for_calc)) {
+	$slryRes = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' AND `status` = 1 ORDER BY `id` DESC LIMIT 1");
+	$slry = $slryRes ? (mysqli_fetch_assoc($slryRes) ?: []) : [];
 	$vacMonthly = (float)($emprow['salary'] ?? 0);
 	if ($vacMonthly <= 0) {
-		$slryRes = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' AND `status` = 1 ORDER BY `id` DESC LIMIT 1");
-		$slry = $slryRes ? (mysqli_fetch_assoc($slryRes) ?: []) : [];
 		foreach (['basic', 'housing', 'transport', 'food', 'misc', 'cashier', 'fuel', 'tel', 'guard', 'other'] as $comp) {
 			$vacMonthly += (float)($slry[$comp] ?? 0);
 		}
 	}
+	// Components chosen in App Settings > Vacation Payroll (same base as EOS / settlements)
+	$vacMonthly = vacation_salary_monthly_base($slry, $vacMonthly);
 	if ($vacMonthly > 0) {
 		$vacDailyRate = $vacMonthly / 30;
 		$vacDueAmount = round($vacDailyRate * max(0, $displayBalance), 2);

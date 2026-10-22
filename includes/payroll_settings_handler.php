@@ -45,6 +45,8 @@ function ensurePayrollParamSettings($conDB) {
         ['loan_installment_edit_max', '60', 'loan_settings', 'Maximum installments allowed when HR edits an existing loan plan'],
         ['vacation_gosi_local_min_days', '20', 'vacation_payroll', 'Minimum Local Vacation days that triggers auto-GOSI-via-vacation payout'],
         ['vacation_payroll_dropout_days', '30', 'vacation_payroll', "Vacation days after which an employee is dropped from that month's payroll generation"],
+        // '' = never configured: every vacation-salary calculation keeps its previous base (includes/vacation_salary_helper.php)
+        ['vacation_salary_components', '', 'vacation_payroll', 'Salary components paid for vacation days (annual / encashed / settlement vacation salary, payroll vacation salary, EOS vacation salary)'],
         ['overtime_monthly_hours', '240', 'overtime_settings', 'Standard monthly working hours used as the divisor for overtime hourly rate'],
         ['overtime_extra_multiplier', '0.5', 'overtime_settings', 'Extra multiplier applied to the basic-salary hourly portion of overtime pay'],
         ['overtime_auto_attendance_enabled', '0', 'overtime_settings', 'Automatically add an Overtime benefit to payroll from attendance check-out times past the employee\'s timetable, using the formula above'],
@@ -204,6 +206,12 @@ function updatePayrollSettings($conDB) {
                     'telephone_allowance', 'other_allowance', 'guard_allowance',
                 ];
                 $clean = array_values(array_intersect($decoded, $allowedComponents));
+                $value = json_encode($clean);
+            } elseif ($settingName === 'vacation_salary_components') {
+                $decoded = json_decode((string)$value, true);
+                $clean = is_array($decoded) ? array_values(array_intersect($decoded, array_keys(VACATION_SALARY_COMPONENT_COLUMNS))) : [];
+                // Basic Salary is fixed in vacation salary (locked in the UI) - always kept, listed first
+                $clean = array_values(array_unique(array_merge(['basic_salary'], $clean)));
                 $value = json_encode($clean);
             } elseif (!is_numeric($value)) {
                 throw new Exception("Invalid value for {$settingName}: must be numeric.");

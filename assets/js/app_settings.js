@@ -1706,6 +1706,39 @@ function __(key, def) {
                     if (!ATTENDANCE_ON && setting.setting_name.includes('_auto_attendance_')) {
                         return; // attendance switched off (Integrations) - kept as saved, not shown
                     }
+                    if (setting.setting_name === 'vacation_salary_components') {
+                        // Salary components paid for vacation days (includes/vacation_salary_helper.php).
+                        // Never saved yet = every component ticked (= the previous all-components base).
+                        let chosen = null;
+                        try {
+                            const parsed = JSON.parse(setting.setting_value || '');
+                            chosen = Array.isArray(parsed) && parsed.length ? parsed : null;
+                        } catch (e) {
+                            chosen = null;
+                        }
+                        let tiles = '';
+                        Object.entries(DEDUCTION_BASE_COMPONENT_LABELS).forEach(([key, label]) => {
+                            // Basic Salary is always part of vacation salary - shown ticked and locked
+                            const locked = key === 'basic_salary';
+                            tiles += `
+                                <label class="as-check-tile"${locked ? ` title="${escapeHtml(__('basic_salary_always_included', 'Basic Salary is always included'))}" style="cursor: not-allowed;"` : ''}>
+                                    <input type="checkbox" class="vacation-salary-component" value="${key}" ${locked || !chosen || chosen.includes(key) ? 'checked' : ''} ${locked ? 'disabled' : ''}>
+                                    <span${locked ? ' style="opacity: .75;"' : ''}><i class="mdi ${locked ? 'mdi-lock' : 'mdi-check'}"></i>${escapeHtml(label)}</span>
+                                </label>
+                            `;
+                        });
+                        formHtml += `
+                            <div class="as-field" id="vacation-salary-components-field">
+                                <div>
+                                    <div class="as-field-label">${__('vacation_salary_components', 'Vacation Salary Components')}</div>
+                                    <small class="form-text text-muted">${__('vacation_salary_components_hint', 'Salary components paid for vacation days: annual and encashed vacation, settlement vacation salary, payroll vacation salary, EOS vacation salary and the Vacation Due amount.')}</small>
+                                    ${chosen ? '' : `<small class="form-text text-warning"><i class="mdi mdi-information-outline"></i> ${__('vacation_salary_components_not_set', 'Not saved yet - all components are used until you save.')}</small>`}
+                                </div>
+                                <div class="as-field-control"><div class="as-check-grid">${tiles}</div></div>
+                            </div>
+                        `;
+                        return;
+                    }
                     if (PAYROLL_BOOLEAN_SETTING_NAMES.includes(setting.setting_name)) {
                         formHtml += `
                             <div class="as-field">
@@ -1741,6 +1774,11 @@ function __(key, def) {
                     container.querySelectorAll('.payroll-param-input').forEach(input => {
                         payload.append(input.dataset.settingName, input.type === 'checkbox' ? (input.checked ? '1' : '0') : input.value.trim());
                     });
+                    if (container.querySelector('#vacation-salary-components-field')) {
+                        // :checked includes the locked (disabled) Basic Salary tile
+                        const vacComponents = Array.from(container.querySelectorAll('.vacation-salary-component:checked')).map(cb => cb.value);
+                        payload.append('vacation_salary_components', JSON.stringify(vacComponents));
+                    }
 
                     btn.disabled = true;
                     try {

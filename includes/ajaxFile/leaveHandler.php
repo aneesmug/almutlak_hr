@@ -1356,7 +1356,9 @@ elseif ($ajaxType == 'applyVacation') {
                 (float)($salary_row['other'] ?? 0) +
                 (float)($salary_row['guard'] ?? 0);
 
-            $encashment_daily_rate = ($total_monthly_salary > 0) ? ($total_monthly_salary / 30) : 0;
+            // Encashment is paid on the components chosen in App Settings > Vacation Payroll
+            $encashment_base = vacation_salary_monthly_base($salary_row, $total_monthly_salary);
+            $encashment_daily_rate = ($encashment_base > 0) ? ($encashment_base / 30) : 0;
             $encashment_amount = round($encashment_daily_rate * (float)$vacdays, 2);
         }
 
@@ -4515,7 +4517,8 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             
             // Calculate vacation salary for deductible payable vacations when payroll payment is selected.
             if ($is_settlement_payable_vacation && $vacation_salary_type === 'payroll') {
-                $vacation_salary = round($daily_rate * $approved_days);
+                // Vacation days are paid on the components chosen in App Settings > Vacation Payroll
+                $vacation_salary = round(round(vacation_salary_monthly_base($vacation_data, $total_monthly_salary) / $days_in_month, 2) * $approved_days);
             }
             
             // USE STORED overtime_amount if available, otherwise recalculate

@@ -91,6 +91,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/init.php';
 require_once __DIR__ . '/user_activity_logger.php';
 include_once __DIR__ . '/helper_functions.php';
+require_once __DIR__ . '/vacation_salary_helper.php'; // vacation salary components (App Settings > Vacation Payroll)
 
 // --- 3. Session Timeout Handling ---
 $timeout_duration = get_setting($conDB, 'session_timeout');

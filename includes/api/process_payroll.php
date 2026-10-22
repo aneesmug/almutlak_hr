@@ -780,7 +780,8 @@ try {
 
             if ($autoBenefitEnabled) {
                 // --- (NEW) VACATION WORKING DAYS SALARY ---
-                addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary);
+                // Vacation salary uses the components chosen in App Settings > Vacation Payroll
+                addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary, vacation_salary_monthly_base($salaryComponents, $totalGrossSalary));
 
                 // --- (NEW) AUTOMATIC OVERTIME BENEFIT FROM ATTENDANCE ---
                 addOrUpdateAttendanceOvertime($pdo, $empId, $monthYear, $totalGrossSalary, floatval($salaryComponents['basic_salary']));
@@ -1616,7 +1617,7 @@ function addOrUpdateAttendanceOvertime($pdo, $empId, $monthYear, $totalGrossSala
  * MODIFIED: Now checks is_deductible flag. If is_deductible = 0 (e.g., Fly + Annual),
  * the vacation does NOT add any payroll benefits. Employee receives their full regular salary.
  */
-function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary) {
+function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary, $vacationGross = null) {
     // Find approved vacation starting this month
     $stmtVacation = $pdo->prepare("
         SELECT id, start_date, return_date, vac_type, fly_type, vacation_salary_type, vacdays, is_deductible
@@ -1751,7 +1752,7 @@ function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalar
                 $vacationDays = (int)$vacation['vacdays'];
                 
                 if ($vacationDays > 0) {
-                    $vacationSalary = $dailyRate * $vacationDays;
+                    $vacationSalary = (($vacationGross ?? $totalGrossSalary) / 30) * $vacationDays;
                     
                     if ($vacationSalary > 0) {
                         $benefitName = "Vacation Salary Benefit (ID: {$vacation['id']})";
