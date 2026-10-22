@@ -562,9 +562,8 @@ if ($isEmployee !== true) {
 					// Reactivate = Edit Employee modal, status switch -> Active / Draft. An employee who left
 					// through End of Service is re-hired there instead (new joining date - includes/eos_rehire.php).
 					require_once __DIR__ . '/eos_rehire.php';
-					$ehEos = eos_latest_record($conDB, (string)$emprow['empid']);
-					$ehIsRehire = $ehEos !== null;
-					$ehRehiredAs = $ehEos && !empty($ehEos['rehired_emp_id']) ? (string)$ehEos['rehired_emp_id'] : '';
+					$ehIsRehire = true; // every inactive employee is re-hired as a new record
+					$ehRehiredAs = employee_rehired_as($conDB, (string)$emprow['empid']);
 					?>
 					<?php if ($ehRehiredAs !== ''): ?>
 						<a href="view_employee.php?emp_id=<?= urlencode($ehRehiredAs) ?>" class="eab-btn eab-btn-success"><i class="mdi mdi-account-arrow-right"></i> <?= str_replace('{emp_id}', htmlspecialchars($ehRehiredAs), __('rehired_as_open', 'Re-hired as #{emp_id}')) ?></a>

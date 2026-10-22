@@ -46,12 +46,12 @@ if ($action === 'get_edit_data') {
 		exit;
 	}
 
-	// Status box: Active/Draft <-> Inactive; locked while on vacation. An inactive employee who left
-	// through End of Service is re-hired as a new employee record (next free emp_id) instead of
-	// reactivated - and only once (locked after that, pointing to the new record).
+	// Status box: Active/Draft <-> Inactive; locked while on vacation. An inactive employee is always
+	// re-hired as a new employee record (next free emp_id, new joining date) - and only once (locked
+	// after that, pointing to the new record).
 	$status = (string)$emp['status'];
 	$eos = $status === '0' ? eos_latest_record($conDB, $editEmpId) : null;
-	$rehiredAs = $eos && !empty($eos['rehired_emp_id']) ? (string)$eos['rehired_emp_id'] : '';
+	$rehiredAs = $status === '0' ? employee_rehired_as($conDB, $editEmpId) : '';
 	$statusLocked = ($status !== '0' && (string)($emp['fly'] ?? '0') === '1') || $rehiredAs !== '';
 	$lockReason = $rehiredAs !== ''
 		? str_replace('{emp_id}', $rehiredAs, __('already_rehired_as', 'This employee was already re-hired as #{emp_id}.'))
@@ -79,11 +79,13 @@ if ($action === 'get_edit_data') {
 			'lock_reason' => $lockReason,
 			'rehired_as' => $rehiredAs,
 			// Set when reactivating means a re-hire: the End of Service settlement + the number the new record gets
-			'rehire' => ($eos && $rehiredAs === '') ? [
-				'eos_id' => (int)$eos['id'],
-				'end_date' => (string)$eos['end_date'],
-				'net_payment' => (string)$eos['net_payment'],
-				'reason' => (string)$eos['leaving_reason'],
+			'rehire' => ($status === '0' && $rehiredAs === '') ? [
+				'eos_id' => $eos ? (int)$eos['id'] : 0,
+				'end_date' => $eos ? (string)$eos['end_date'] : '',
+				'net_payment' => $eos ? (string)$eos['net_payment'] : '',
+				// left without End of Service: when / why it was set inactive
+				'ter_date' => substr((string)($emp['ter_date'] ?? ''), 0, 10),
+				'ter_note' => (string)($emp['ter_note'] ?? ''),
 				'next_emp_id' => eos_next_emp_id($pdo),
 			] : null,
 		],

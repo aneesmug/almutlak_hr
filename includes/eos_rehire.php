@@ -1,11 +1,12 @@
 <?php
 /**
- * Re-hire after End of Service.
+ * Re-hiring an inactive employee.
  *
- * An employee who left through End of Service keeps that record untouched (inactive, with its
- * emp_eos settlement). Re-hiring (Edit Employee > status Active/Draft) registers them again as a
- * NEW employee under the next free emp_id - a copy of the old record with a new joining date - and
- * links the two on the emp_eos row (rehired_emp_id), so the old record can point to the new one.
+ * Setting any inactive employee back to Active / Draft (Edit Employee) re-hires them: the old record
+ * stays untouched (inactive, with its End of Service settlement if they had one) and they are
+ * registered again as a NEW employee under the next free emp_id - a copy of the old record with a new
+ * joining date. Each re-hire is recorded in employee_rehires (old -> new); re-hires made before that
+ * table existed are linked on the emp_eos row (rehired_emp_id) and are still read from there.
  */
 
 if (!function_exists('eos_ensure_rehire_columns')) {
@@ -39,6 +40,47 @@ if (!function_exists('eos_ensure_rehire_columns')) {
 		if ($parts) {
 			mysqli_query($conDB, "ALTER TABLE `emp_eos` " . implode(', ', $parts));
 		}
+	}
+}
+
+if (!function_exists('employee_rehires_ensure_table')) {
+	function employee_rehires_ensure_table($conDB): void
+	{
+		static $done = false;
+		if ($done) {
+			return;
+		}
+		$done = true;
+		mysqli_query($conDB, "CREATE TABLE IF NOT EXISTS `employee_rehires` (
+			`id` INT(11) NOT NULL AUTO_INCREMENT,
+			`old_emp_id` VARCHAR(255) NOT NULL,
+			`new_emp_id` VARCHAR(255) NOT NULL,
+			`eos_id` INT(11) NULL DEFAULT NULL,
+			`joining_date` DATE NOT NULL,
+			`rehired_by` VARCHAR(50) NULL DEFAULT NULL,
+			`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (`id`),
+			UNIQUE KEY `uq_old_emp_id` (`old_emp_id`),
+			KEY `idx_new_emp_id` (`new_emp_id`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+	}
+}
+
+/** emp_id this (inactive) employee was re-hired as, or '' when not re-hired yet. */
+if (!function_exists('employee_rehired_as')) {
+	function employee_rehired_as($conDB, string $oldEmpId): string
+	{
+		employee_rehires_ensure_table($conDB);
+		$stmt = $conDB->prepare("SELECT `new_emp_id` FROM `employee_rehires` WHERE `old_emp_id` = ? LIMIT 1");
+		$stmt->bind_param('s', $oldEmpId);
+		$stmt->execute();
+		$row = $stmt->get_result()->fetch_row();
+		$stmt->close();
+		if ($row) {
+			return (string)$row[0];
+		}
+		$eos = eos_latest_record($conDB, $oldEmpId);
+		return $eos && !empty($eos['rehired_emp_id']) ? (string)$eos['rehired_emp_id'] : '';
 	}
 }
 

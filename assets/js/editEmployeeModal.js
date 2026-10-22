@@ -402,20 +402,25 @@ async function openEditEmployeeModal(empId, opts) {
         } else if (initialStatus === '0' && val !== '0' && rehire) {
             // Left through End of Service: re-hire as a new employment from a new joining date
             if (!$p.find('#eeRehireDate').length) {
-                const eosLine = __('rehire_eos_line', 'Left through End of Service on {date} (net payment {amount}).')
-                    .replace('{date}', rehire.end_date || '-').replace('{amount}', Number(rehire.net_payment || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                const eosLine = rehire.end_date
+                    ? __('rehire_eos_line', 'Left through End of Service on {date} (net payment {amount}).')
+                        .replace('{date}', rehire.end_date).replace('{amount}', Number(rehire.net_payment || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                    : (rehire.ter_date
+                        ? __('rehire_inactive_line', 'Inactive since {date}.').replace('{date}', rehire.ter_date) + (rehire.ter_note ? ' (' + rehire.ter_note + ')' : '')
+                        : '');
                 $p.html(`
                     <div class="ee-status-note tone-green"><i class="fa fa-user-plus"></i>
                         <span><b>${escapeHtml(__('rehire_title', 'Re-hire as a new employment'))}</b><br>
                         ${escapeHtml(eosLine)}
-                        ${escapeHtml(__('rehire_text', 'This record and its settlement stay as they are. A new employee record is registered from the new joining date - service, vacation and the next End of Service count from there.'))}</span>
+                        ${escapeHtml(__('rehire_text', 'This record stays as it is. A new employee record is registered from the new joining date - service, vacation and the next End of Service count from there.'))}</span>
                     </div>
                     <div class="form-row">
                         ${newEmpFieldset('new_employee_id', 'New Employee ID', `<input type="text" class="form-control readonly-data" value="${escapeHtml(String(rehire.next_emp_id || ''))}" readonly title="${escapeHtml(__('new_emp_id_hint', 'Next free number - assigned on save'))}">`, 'col-md-3', 'fa-id-badge')}
                         ${newEmpFieldset('new_joining_date', 'New Joining Date', `<input type="text" id="eeRehireDate" class="form-control" value="">`, 'col-md-4', 'fa-calendar-plus', true)}
                     </div>`);
                 if (window.AppDate) {
-                    const minDay = rehire.end_date ? new Date(new Date(rehire.end_date + 'T00:00:00').getTime() + 86400000).toISOString().slice(0, 10) : undefined;
+                    const leftOn = rehire.end_date || rehire.ter_date;
+                    const minDay = /^\d{4}-\d{2}-\d{2}$/.test(leftOn || '') ? new Date(new Date(leftOn + 'T00:00:00').getTime() + 86400000).toISOString().slice(0, 10) : undefined;
                     AppDate.single('#eeRehireDate', { static: true, minDate: minDay });
                 }
             }
@@ -543,9 +548,10 @@ async function openEditEmployeeModal(empId, opts) {
                             Swal.showValidationMessage(__('rehire_joining_date_required', 'Enter the new joining date for the re-hire.'));
                             return false;
                         }
-                        if (rehire.end_date && rd <= rehire.end_date) {
+                        const leftOn = rehire.end_date || rehire.ter_date;
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(leftOn || '') && rd <= leftOn) {
                             $('#eeRehireDate').addClass('is-invalid');
-                            Swal.showValidationMessage(__('rehire_date_after_eos', 'The new joining date must be after the End of Service date ({date}).').replace('{date}', rehire.end_date));
+                            Swal.showValidationMessage(__('rehire_date_after_leaving', 'The new joining date must be after the date the employee left ({date}).').replace('{date}', leftOn));
                             return false;
                         }
                         form.rehire_joining_date = rd;

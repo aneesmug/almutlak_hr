@@ -169,62 +169,52 @@ function employee_apply_edit(array $formData, array $perm): array
 		}
 	}
 
-	// Inactive (0) -> Active (1) / Draft (2): undo what the Inactive path above wrote (clear note,
-	// ter_note, ter_date) and re-enable the login. An employee who left through End of Service is
-	// re-hired instead: the old record stays as it is (inactive, with its settlement) and a NEW
-	// employee record is registered under the next free emp_id from the new joining date
-	// (includes/eos_rehire.php). The edits made in the form are applied to the new record.
-	$setReactivated = false;
+	// Inactive (0) -> Active (1) / Draft (2) is always a re-hire: the old record stays as it is
+	// (inactive, with its End of Service settlement if any) and a NEW employee record is registered
+	// under the next free emp_id from a new joining date (includes/eos_rehire.php). The edits made in
+	// the form are applied to the new record. Each inactive record can be re-hired once.
+	$isRehire = false;
 	$rehireEos = null;
 	$rehireDate = null;
 	if (isset($formData['emp_status'])
 		&& (string)$old_employee['status'] === '0'
 		&& in_array((string)$formData['emp_status'], ['1', '2'], true)) {
-		$eos = eos_latest_record($GLOBALS['conDB'], $employee_id_from_form);
-		if ($eos && !empty($eos['rehired_emp_id'])) {
-			throw new RuntimeException(str_replace('{emp_id}', $eos['rehired_emp_id'],
+		$rehiredAs = employee_rehired_as($GLOBALS['conDB'], $employee_id_from_form);
+		if ($rehiredAs !== '') {
+			throw new RuntimeException(str_replace('{emp_id}', $rehiredAs,
 				__('already_rehired_as', 'This employee was already re-hired as #{emp_id}.')));
 		}
-		if ($eos) {
-			$rehireEos = $eos;
-			$rehireDate = trim((string)($formData['rehire_joining_date'] ?? ''));
-			$rehireObj = DateTime::createFromFormat('!Y-m-d', $rehireDate);
-			if (!$rehireObj || $rehireObj->format('Y-m-d') !== $rehireDate) {
-				throw new RuntimeException(__('rehire_joining_date_required', 'Enter the new joining date for the re-hire.'));
-			}
-			$eosEnd = DateTime::createFromFormat('!Y-m-d', (string)($eos['end_date'] ?? ''));
-			if ($eosEnd && $rehireObj <= $eosEnd) {
-				throw new RuntimeException(str_replace('{date}', $eosEnd->format('Y-m-d'),
-					__('rehire_date_after_eos', 'The new joining date must be after the End of Service date ({date}).')));
-			}
-			// The new record gets the re-hire date - drop the old joining date the Employment tab posts
-			$setParts = array_values(array_filter($setParts, function ($p) { return strpos($p, '`joining_date`') !== 0; }));
-			unset($params[':joining_date']);
-		} else {
-			$setParts[] = "`status` = :status";
-			$setParts[] = "`note` = ''";
-			$setParts[] = "`ter_note` = ''";
-			$setParts[] = "`ter_date` = ''";
-			$params[':status'] = (string)$formData['emp_status'];
-			$old_values['status'] = $old_employee['status'];
-			$old_values['note'] = $old_employee['note'] ?? '';
-			$old_values['ter_note'] = $old_employee['ter_note'] ?? '';
-			$old_values['ter_date'] = $old_employee['ter_date'] ?? '';
+		$isRehire = true;
+		$rehireEos = eos_latest_record($GLOBALS['conDB'], $employee_id_from_form);
+		$rehireDate = trim((string)($formData['rehire_joining_date'] ?? ''));
+		$rehireObj = DateTime::createFromFormat('!Y-m-d', $rehireDate);
+		if (!$rehireObj || $rehireObj->format('Y-m-d') !== $rehireDate) {
+			throw new RuntimeException(__('rehire_joining_date_required', 'Enter the new joining date for the re-hire.'));
 		}
-		$setReactivated = true;
+		// Must start after the old employment ended: End of Service date, else the inactive date
+		$leftOn = DateTime::createFromFormat('!Y-m-d', (string)($rehireEos['end_date'] ?? ''))
+			?: DateTime::createFromFormat('!Y-m-d', substr((string)($old_employee['ter_date'] ?? ''), 0, 10));
+		if ($leftOn && $rehireObj <= $leftOn) {
+			throw new RuntimeException(str_replace('{date}', $leftOn->format('Y-m-d'),
+				__('rehire_date_after_leaving', 'The new joining date must be after the date the employee left ({date}).')));
+		}
+		// The new record gets the re-hire date - drop the old joining date the Employment tab posts
+		$setParts = array_values(array_filter($setParts, function ($p) { return strpos($p, '`joining_date`') !== 0; }));
+		unset($params[':joining_date']);
 	}
 
-	if (!$setParts && !$rehireEos) {
+	if (!$setParts && !$isRehire) {
 		return ['kind' => 'none', 'title' => __('info'), 'message' => __('no_changes_made')];
 	}
 
 	// Build and execute the query. A re-hire first registers the new record, the form's edits then
-	// go to that record, and the settlement is linked to it - all as one change.
+	// go to that record, and the re-hire is recorded - all as one change.
 	$targetEmpId = $employee_id_from_form;
 	$newStatus = (string)($formData['emp_status'] ?? '');
 	$pdo->beginTransaction();
 	try {
-		if ($rehireEos) {
+		if ($isRehire) {
+			employee_rehires_ensure_table($GLOBALS['conDB']);
 			$targetEmpId = eos_create_rehire_record($pdo, $employee_id_from_form, $rehireDate, $newStatus);
 			$params[':emp_id'] = $targetEmpId;
 		}
@@ -234,14 +224,14 @@ function employee_apply_edit(array $formData, array $perm): array
 			$stmt = $pdo->prepare($sql);
 			$stmt->execute($params);
 		}
-		if ($rehireEos) {
-			$pdo->prepare("UPDATE `emp_eos` SET `rehired_at` = NOW(), `rehired_by` = :by, `rehired_emp_id` = :new_emp, `rehire_joining_date` = :new_date WHERE `id` = :id")
-				->execute([
-					':by' => (string)($GLOBALS['logged_in_empid'] ?? $GLOBALS['empid'] ?? ''),
-					':new_emp' => $targetEmpId,
-					':new_date' => $rehireDate,
-					':id' => $rehireEos['id'],
-				]);
+		if ($isRehire) {
+			$rehiredBy = (string)($GLOBALS['logged_in_empid'] ?? $GLOBALS['empid'] ?? '');
+			$pdo->prepare("INSERT INTO `employee_rehires` (`old_emp_id`, `new_emp_id`, `eos_id`, `joining_date`, `rehired_by`) VALUES (:old, :new, :eos, :jd, :by)")
+				->execute([':old' => $employee_id_from_form, ':new' => $targetEmpId, ':eos' => $rehireEos['id'] ?? null, ':jd' => $rehireDate, ':by' => $rehiredBy]);
+			if ($rehireEos) {
+				$pdo->prepare("UPDATE `emp_eos` SET `rehired_at` = NOW(), `rehired_by` = :by, `rehired_emp_id` = :new_emp, `rehire_joining_date` = :new_date WHERE `id` = :id")
+					->execute([':by' => $rehiredBy, ':new_emp' => $targetEmpId, ':new_date' => $rehireDate, ':id' => $rehireEos['id']]);
+			}
 			// The person's login (username = Iqama) moves to the new employment
 			$pdo->prepare("UPDATE `admin_login` SET `emp_id` = :new_emp, `status` = :st WHERE `emp_id` = :old_emp")
 				->execute([':new_emp' => $targetEmpId, ':st' => $newStatus === '1' ? 1 : 0, ':old_emp' => $employee_id_from_form]);
@@ -256,11 +246,6 @@ function employee_apply_edit(array $formData, array $perm): array
 	if ($setInactive) {
 		$pdo->prepare("UPDATE `admin_login` SET `status` = 0 WHERE `emp_id` = :emp_id")->execute([':emp_id' => $employee_id_from_form]);
 	}
-	// Reactivated employee: switch the login back on (only when back to Active, Draft stays locked out).
-	if ($setReactivated && !$rehireEos && $newStatus === '1') {
-		$pdo->prepare("UPDATE `admin_login` SET `status` = 1 WHERE `emp_id` = :emp_id")->execute([':emp_id' => $employee_id_from_form]);
-	}
-
 	// Avatar follows the gender when it is a default picture; a lost upload falls back the same way
 	employee_avatar_sync($GLOBALS['conDB'], $targetEmpId);
 
@@ -269,13 +254,13 @@ function employee_apply_edit(array $formData, array $perm): array
 		$pdo->prepare("UPDATE `admin_login` SET `dept` = :dept WHERE `emp_id` = :emp_id")->execute([':dept' => $params[':dept'], ':emp_id' => $targetEmpId]);
 	}
 
-	if ($rehireEos) {
+	if ($isRehire) {
 		ActivityLogger::logCreate(
 			'Employee',
 			'edit_employee.php',
 			$targetEmpId,
 			['emp_id' => $targetEmpId, 'rehired_from_emp_id' => $employee_id_from_form, 'joining_date' => $rehireDate, 'status' => $newStatus],
-			"Re-hired employee " . ($old_employee['name'] ?? '') . " (#{$employee_id_from_form}) as #{$targetEmpId} after End of Service",
+			"Re-hired employee " . ($old_employee['name'] ?? '') . " (#{$employee_id_from_form}) as #{$targetEmpId}" . ($rehireEos ? ' after End of Service' : ''),
 			'employees'
 		);
 		return [
@@ -283,7 +268,7 @@ function employee_apply_edit(array $formData, array $perm): array
 			'new_emp_id' => $targetEmpId,
 			'title' => __('success'),
 			'message' => str_replace(['{emp_id}', '{date}'], [$targetEmpId, $rehireDate],
-				__('employee_rehired_success', 'Employee has been re-hired as #{emp_id} with joining date {date}. The previous record and its End of Service are kept.')),
+				__('employee_rehired_success', 'Employee has been re-hired as #{emp_id} with joining date {date}. The previous record is kept.')),
 		];
 	}
 
@@ -309,9 +294,6 @@ function employee_apply_edit(array $formData, array $perm): array
 
 	if ($setInactive && $changed) {
 		return ['kind' => 'inactive', 'title' => __('success'), 'message' => __('employee_set_inactive_success', 'Employee has been set to Inactive and the login account was disabled.')];
-	}
-	if ($setReactivated && $changed) {
-		return ['kind' => 'reactivated', 'title' => __('success'), 'message' => __('employee_reactivated_success', 'Employee has been reactivated and the inactive details were cleared.')];
 	}
 	if ($changed) {
 		return ['kind' => 'updated', 'title' => __('success'), 'message' => __('employee_details_edited_successfully')];
