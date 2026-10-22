@@ -246,21 +246,21 @@ include(__DIR__ . '/session_config_js.php');
                         /* user card - SweetAlert2 modal (#tbxUserCard) */
                         .tbx-swal.swal2-popup { width:370px; max-width:calc(100vw - 32px); padding:0 !important; border-radius:18px; overflow:hidden; background:#fff; }
                         .tbx-swal .swal2-html-container { margin:0 !important; padding:0 !important; text-align:start; overflow:visible; }
-                        .tbx-swal .swal2-close { color:#fff; z-index:3; border-radius:50%; width:34px; height:34px; top:10px; inset-inline-end:10px; font-size:26px; }
-                        .tbx-swal .swal2-close:hover { color:#fff; background:rgba(255,255,255,.18); }
-                        .tbx-uc-cover { height:92px; background:linear-gradient(135deg,#0e7490 0%,#0891b2 55%,#22d3ee 100%); }
-                        .tbx-uc-top { display:flex; flex-direction:column; align-items:center; text-align:center; padding:0 20px 14px; margin-top:-46px; }
-                        .tbx-uc-avatar { width:92px; height:92px; border-radius:50%; object-fit:cover; border:4px solid #fff; box-shadow:0 0 0 3px #22c55e, 0 8px 20px rgba(15,23,42,.18); background:#fff; }
+                        .tbx-swal .swal2-close { position:absolute; color:#fff; z-index:3; border-radius:50%; width:32px; height:32px; top:12px; inset-inline-end:12px; font-size:24px; background:rgba(255,255,255,.15); box-shadow:none !important; }
+                        .tbx-swal .swal2-close:hover { color:#fff; background:rgba(255,255,255,.3); }
+                        .tbx-uc-cover { height:110px; background:radial-gradient(circle at 85% 20%, rgba(255,255,255,.18) 0 60px, transparent 61px), radial-gradient(circle at 10% 110%, rgba(255,255,255,.12) 0 70px, transparent 71px), linear-gradient(135deg,#1e3a8a 0%,#4f46e5 55%,#7c3aed 100%); }
+                        .tbx-uc-top { display:flex; flex-direction:column; align-items:center; text-align:center; padding:0 20px 14px; margin-top:-48px; }
+                        .tbx-uc-avatar { width:92px; height:92px; border-radius:50%; object-fit:cover; border:4px solid #fff; box-shadow:0 0 0 3px #22c55e, 0 10px 24px rgba(30,58,138,.28); background:#fff; }
                         .tbx-uc-hello { margin-top:10px; font-size:12px; color:#64748b; }
                         .tbx-uc-name { font-size:19px; font-weight:700; color:#0f172a; line-height:1.3; }
                         .tbx-uc-full { font-size:12px; color:#94a3b8; margin-top:1px; }
                         .tbx-uc-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; margin-top:10px; }
                         .tbx-uc-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; line-height:1.3; color:var(--c); background:var(--bg); }
                         .tbx-uc-chip i { --fa-primary-color:var(--c); --fa-secondary-color:var(--c); --fa-secondary-opacity:.4; }
-                        .tbx-uc-info { margin:0 16px; padding:4px 12px; border-radius:12px; background:#f8fafc; border:1px solid #eef2f6; }
+                        .tbx-uc-info { margin:0 16px; padding:4px 12px; border-radius:12px; background:#f5f7ff; border:1px solid #e0e7ff; }
                         .tbx-uc-row { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:13px; }
                         .tbx-uc-row + .tbx-uc-row { border-top:1px dashed #e2e8f0; }
-                        .tbx-uc-row > i { width:18px; text-align:center; --fa-primary-color:#0e7490; --fa-secondary-color:#0e7490; --fa-secondary-opacity:.4; }
+                        .tbx-uc-row > i { width:18px; text-align:center; --fa-primary-color:#4f46e5; --fa-secondary-color:#4f46e5; --fa-secondary-opacity:.4; }
                         .tbx-uc-row .lbl { color:#64748b; min-width:84px; }
                         .tbx-uc-row .val { flex:1; min-width:0; color:#0f172a; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
                         .tbx-uc-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:14px 16px 6px; }
@@ -317,7 +317,7 @@ include(__DIR__ . '/session_config_js.php');
                                 <div class="tbx-uc-name"><?= $tbxEsc($tbxMidName) ?></div>
                                 <?php if ($tbxFullName !== $tbxMidName) { ?><div class="tbx-uc-full"><?= $tbxEsc($tbxFullName) ?></div><?php } ?>
                                 <div class="tbx-uc-chips">
-                                    <?php if (!empty($empid)) { ?><span class="tbx-uc-chip" style="--c:#0e7490;--bg:#cffafe;"><i class="fa-duotone fa-id-badge"></i> <?= $tbxEsc($empid) ?></span><?php } ?>
+                                    <?php if (!empty($empid)) { ?><span class="tbx-uc-chip" style="--c:#4338ca;--bg:#e0e7ff;"><i class="fa-duotone fa-id-badge"></i> <?= $tbxEsc($empid) ?></span><?php } ?>
                                     <?php if ($tbRole !== '') { ?><span class="tbx-uc-chip" style="--c:#15803d;--bg:#dcfce7;"><i class="fa-duotone fa-user-shield"></i> <?= $tbxEsc($tbRole) ?></span><?php } ?>
                                 </div>
                             </div>
@@ -326,7 +326,7 @@ include(__DIR__ . '/session_config_js.php');
                                 <div class="tbx-uc-row"><i class="fa-duotone fa-sitemap"></i><span class="lbl"><?= __('department', 'Department') ?></span><span class="val"><?= $tbxList($tbDepts) ?></span></div>
                             </div>
                             <div class="tbx-uc-actions">
-                                <a href="profile.php" class="tbx-uc-tile" style="--c:#0e7490;--bg:#cffafe;">
+                                <a href="profile.php" class="tbx-uc-tile" style="--c:#2563eb;--bg:#dbeafe;">
                                     <span class="tbx-uc-ic"><i class="fa-duotone fa-user"></i></span><?= __('my_account') ?>
                                 </a>
                                 <?php if ($is_system_admin ?? false) { ?>
@@ -367,7 +367,7 @@ include(__DIR__ . '/session_config_js.php');
                                     showCloseButton: true,
                                     allowOutsideClick: false,
                                     padding: 0,
-                                    customClass: { popup: 'tbx-swal' },
+                                    customClass: { popup: 'tbx-swal srs-skip' }, // srs-skip: keep sr_swal_theme.js padding/styling off this popup
                                     showClass: { popup: 'swal2-show' },
                                     didOpen: function () { var c = Swal.getHtmlContainer(); c.style.display = 'block'; c.appendChild(card); },
                                     willClose: restore,
