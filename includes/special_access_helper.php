@@ -97,6 +97,8 @@ if (!function_exists('get_special_access_labels')) {
             'manage_attendance' => 'Attendance Record: View & Manage Attendance Page',
             'manage_attendance_config' => 'Attendance: View & Manage Attendance Config (Timetables) Page',
             'add_manual_attendance' => 'Attendance Record: Add Record Button (Manual Attendance Entry)',
+            'edit_attendance_record' => 'Attendance Record: Edit Record (Attendance Page & Employee Profile Tab)',
+            'delete_attendance_record' => 'Attendance Record: Delete Record (Attendance Page & Employee Profile Tab)',
             'view_employee_attendance_tab' => 'Attendance: View Employee Profile\'s Attendance Record Tab',
             'manage_own_screen_settings' => 'Screen Settings: Allow User to Edit Own Scale/Resolution/Fullscreen',
             'manage_temp_role_transfer' => 'Access App Settings - Temporary Role Transfer Tab',
@@ -190,7 +192,7 @@ if (!function_exists('get_special_access_categories')) {
             ],
             'Page Access' => [
                 'icon' => 'fa-door-open',
-                'keys' => array_merge(array_keys(get_special_access_page_labels()), ['manage_device_monitor', 'manage_attendance', 'add_manual_attendance', 'manage_attendance_config', 'view_employee_attendance_tab']),
+                'keys' => array_merge(array_keys(get_special_access_page_labels()), ['manage_device_monitor', 'manage_attendance', 'add_manual_attendance', 'edit_attendance_record', 'delete_attendance_record', 'manage_attendance_config', 'view_employee_attendance_tab']),
             ],
             'Employee Master' => [
                 'icon' => 'fa-id-badge',
@@ -370,7 +372,7 @@ if (!function_exists('get_page_access_subgroups')) {
                 ],
             ],
             'System Administration' => ['icon' => 'fa-user-shield', 'keys' => ['access_all_users', 'access_log_activity', 'access_view_activity_logs', 'access_d365_employee_compare']],
-            'Attendance' => ['icon' => 'fa-calendar-check', 'keys' => ['manage_attendance', 'add_manual_attendance', 'manage_attendance_config', 'view_employee_attendance_tab']],
+            'Attendance' => ['icon' => 'fa-calendar-check', 'keys' => ['manage_attendance', 'add_manual_attendance', 'edit_attendance_record', 'delete_attendance_record', 'manage_attendance_config', 'view_employee_attendance_tab']],
             'Reports' => ['icon' => 'fa-chart-bar', 'keys' => ['access_reports']],
         ];
     }

@@ -19,6 +19,10 @@ if (!$canManage) {
     exit;
 }
 
+// Row actions on existing records: separate Special Access keys (Add Record = 'add_manual_attendance')
+$canEditRecord = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'edit_attendance_record', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$canDeleteRecord = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'delete_attendance_record', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+
 $action = $_POST['action'] ?? '';
 
 switch ($action) {
@@ -39,6 +43,7 @@ switch ($action) {
 }
 
 function list_attendance($conDB) {
+    global $canEditRecord, $canDeleteRecord;
     $draw = (int) ($_POST['draw'] ?? 1);
     $start = (int) ($_POST['start'] ?? 0);
     $length = (int) ($_POST['length'] ?? 10);
@@ -130,10 +135,10 @@ function list_attendance($conDB) {
         $dateOnly = date('Y-m-d', strtotime($row['date']));
         $noteEsc = htmlspecialchars($row['note'] ?? '', ENT_QUOTES);
 
-        $action = "
-            <div class='btn-group dropdown'>
-                <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-                <div class='dropdown-menu dropdown-menu-right'>
+        // Only the actions this user holds; no menu at all when neither key is granted
+        $items = '';
+        if ($canEditRecord) {
+            $items .= "
                     <a class='dropdown-item text-dark btn-edit-attendance' href='javascript:void(0);'
                         data-emp-id=\"{$row['emp_id']}\"
                         data-emp-label=\"{$empLabel}\"
@@ -143,10 +148,18 @@ function list_attendance($conDB) {
                         data-state=\"" . htmlspecialchars($row['state'], ENT_QUOTES) . "\"
                         data-note=\"{$noteEsc}\">
                         <i class='mdi mdi-pencil mr-2'></i>Edit
-                    </a>
+                    </a>";
+        }
+        if ($canDeleteRecord) {
+            $items .= "
                     <a class='dropdown-item text-danger deleteAjax' href='javascript:void(0);' data-id='{$row['id']}' data-tbl='attendance' data-file='0'>
                         <i class='fa fa-trash mr-2'></i>Delete
-                    </a>
+                    </a>";
+        }
+        $action = $items === '' ? '' : "
+            <div class='btn-group dropdown'>
+                <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
+                <div class='dropdown-menu dropdown-menu-right'>{$items}
                 </div>
             </div>
         ";
@@ -300,8 +313,8 @@ function add_edit_attendance($conDB) {
     $dateNormalized = date('Y-m-d', strtotime($date));
 
     // No row yet for this employee/day = a new manual record, which needs the 'add_manual_attendance' key.
-    // Editing an existing row only needs 'manage_attendance' (already checked above).
-    global $empid, $user_role, $user_type, $is_system_admin;
+    // Changing an existing row needs 'edit_attendance_record'.
+    global $empid, $user_role, $user_type, $is_system_admin, $canEditRecord;
     $stmt = mysqli_prepare($conDB, "SELECT 1 FROM attendance WHERE emp_id = ? AND DATE(date) = ? LIMIT 1");
     mysqli_stmt_bind_param($stmt, 'is', $empId, $dateNormalized);
     mysqli_stmt_execute($stmt);
@@ -310,6 +323,11 @@ function add_edit_attendance($conDB) {
     if (!$exists && !user_has_special_access($conDB, $empid ?? '', 'add_manual_attendance', $user_role ?? '', $user_type ?? '', !empty($is_system_admin))) {
         http_response_code(403);
         echo json_encode(['status' => 'error', 'message' => 'You do not have permission to add attendance records.']);
+        return;
+    }
+    if ($exists && !$canEditRecord) {
+        http_response_code(403);
+        echo json_encode(['status' => 'error', 'message' => 'You do not have permission to edit attendance records.']);
         return;
     }
 

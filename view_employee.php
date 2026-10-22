@@ -122,6 +122,12 @@ if (mysqli_num_rows($query) == 1) {
 		// Add Record button (new manual record) needs the separate 'add_manual_attendance' key; editing stays under manage_attendance.
 		$canAddAttendanceRecord = $canManageAttendanceRecord
 			&& user_has_special_access($conDB, $empid ?? '', 'add_manual_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+		// Row Edit / Delete on the Attendance tab: own Special Access keys; the Action column is hidden when neither is granted
+		$canEditAttendanceRecord = $canManageAttendanceRecord
+			&& user_has_special_access($conDB, $empid ?? '', 'edit_attendance_record', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+		$canDeleteAttendanceRecord = $canManageAttendanceRecord
+			&& user_has_special_access($conDB, $empid ?? '', 'delete_attendance_record', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+		$canAttendanceRowActions = $canEditAttendanceRecord || $canDeleteAttendanceRecord;
 		require_once __DIR__ . '/includes/attendance_ui.php'; // shared attendance status tiles + date filter (same as attendance.php)
 
 		// --- START: Loan Summary Calculation ---
@@ -3104,7 +3110,7 @@ if (mysqli_num_rows($query) == 1) {
 															<th><?= __('late_minutes', 'Late (min)') ?></th>
 															<th><?= __('early_leave_minutes', 'Early Leave (min)') ?></th>
 															<th><?= __('note') ?></th>
-															<?php if ($canManageAttendanceRecord): ?>
+															<?php if ($canAttendanceRowActions): ?>
 															<th class="text-right"><?= __('action') ?></th>
 															<?php endif; ?>
 														</tr>
@@ -4615,6 +4621,7 @@ if (mysqli_num_rows($query) == 1) {
 			// Safely pass the PHP employee ID to a JavaScript variable.
 			const employeeId = <?= json_encode($emprow['empid']); ?>;
 			const canManageAttendanceRecord = <?= $canManageAttendanceRecord ? 'true' : 'false' ?>;
+			const canAttendanceRowActions = <?= $canAttendanceRowActions ? 'true' : 'false' ?>; // Action column (edit/delete keys)
 			const canAddAttendanceRecord = <?= $canAddAttendanceRecord ? 'true' : 'false' ?>;
 			$(document).ready(function() {
 				// 1. Initialize the DataTable with the correct columns for notes.
@@ -4969,7 +4976,7 @@ if (mysqli_num_rows($query) == 1) {
 					buttons: (function() {
 						const exportColumns = function(idx, data, node) {
 							const colCount = $('#attendance_tbl').DataTable().columns().header().length;
-							return canManageAttendanceRecord ? idx < colCount - 1 : true;
+							return canAttendanceRowActions ? idx < colCount - 1 : true;
 						};
 						// modifier: page 'all' - export every filtered/sorted row across all
 						// pages of the table (not just whatever page happens to be showing),
@@ -5013,7 +5020,7 @@ if (mysqli_num_rows($query) == 1) {
 							{ data: 'early_minutes', render: aDisplay(v => aEmpty(v) ? aDash : `<span class="att-mins tone-sky">${aEsc(v)} ${__('min', 'min')}</span>`) },
 							{ data: 'note', render: aDisplay(n => aEmpty(n) ? aDash : `<span class="att-note" title="${aEsc(n)}">${aEsc(n)}</span>`) }
 						];
-						if (canManageAttendanceRecord) {
+						if (canAttendanceRowActions) {
 							cols.push({ data: 'action', orderable: false, searchable: false, className: 'text-right', render: aDisplay(html =>
 								// Server sends a Bootstrap dropdown; restyle its toggle like the other sr tables
 								String(html || '').replace('table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm', 'sr-more-btn dropdown-toggle arrow-none')

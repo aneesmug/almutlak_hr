@@ -22,6 +22,11 @@ if (!$canViewAttendanceTab) {
 
 $canManageAttendanceRecord = ($is_system_admin ?? false)
     || user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+// Row Edit / Delete: own Special Access keys on top of manage_attendance (same as attendance.php)
+$canEditRecord = $canManageAttendanceRecord && (($is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'edit_attendance_record', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
+$canDeleteRecord = $canManageAttendanceRecord && (($is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'delete_attendance_record', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
 
 $empId = (int) ($_POST['emp_id'] ?? 0);
 $draw = (int) ($_POST['draw'] ?? 1);
@@ -112,12 +117,11 @@ while ($row = mysqli_fetch_assoc($rows)) {
         'note' => $row['note'] ?: '',
     ];
 
-    if ($canManageAttendanceRecord) {
+    if ($canEditRecord || $canDeleteRecord) {
         $noteEsc = htmlspecialchars($row['note'] ?? '', ENT_QUOTES);
-        $entry['action'] = "
-            <div class='btn-group dropdown'>
-                <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-                <div class='dropdown-menu dropdown-menu-right'>
+        $items = '';
+        if ($canEditRecord) {
+            $items .= "
                     <a class='dropdown-item text-dark btn-edit-attendance-record' href='javascript:void(0);'
                         data-date=\"{$dateOnly}\"
                         data-time-in=\"{$row['time_in']}\"
@@ -125,10 +129,18 @@ while ($row = mysqli_fetch_assoc($rows)) {
                         data-state=\"" . htmlspecialchars($row['state'], ENT_QUOTES) . "\"
                         data-note=\"{$noteEsc}\">
                         <i class='mdi mdi-pencil mr-2'></i>Edit
-                    </a>
+                    </a>";
+        }
+        if ($canDeleteRecord) {
+            $items .= "
                     <a class='dropdown-item text-danger deleteAjax' href='javascript:void(0);' data-id='{$row['id']}' data-tbl='attendance' data-file='0'>
                         <i class='fa fa-trash mr-2'></i>Delete
-                    </a>
+                    </a>";
+        }
+        $entry['action'] = "
+            <div class='btn-group dropdown'>
+                <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
+                <div class='dropdown-menu dropdown-menu-right'>{$items}
                 </div>
             </div>
         ";

@@ -19,6 +19,10 @@ if (!$canManageAttendance) {
 }
 // "Add Record" (manual entry) is its own Special Access key; editing existing rows stays under manage_attendance.
 $canAddAttendance = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'add_manual_attendance', $user_role ?? '', $user_type ?? '', $isSystemAdmin);
+// Row Edit / Delete: own keys too (server builds only the allowed menu items); no Action column when neither is granted
+$canEditAttendance = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'edit_attendance_record', $user_role ?? '', $user_type ?? '', $isSystemAdmin);
+$canDeleteAttendance = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'delete_attendance_record', $user_role ?? '', $user_type ?? '', $isSystemAdmin);
+$canRowActions = $canEditAttendance || $canDeleteAttendance;
 
 require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + date filter
 ?>
@@ -156,7 +160,7 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                                         <th><?= __('state', 'State') ?></th>
                                         <th><?= __('source', 'Source') ?></th>
                                         <th><?= __('note') ?></th>
-                                        <th class="text-right"><?= __('action_header', 'Action') ?></th>
+                                        <?php if ($canRowActions): ?><th class="text-right"><?= __('action_header', 'Action') ?></th><?php endif; ?>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -319,11 +323,13 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                     ? `<span class="sr-chip"><i class="mdi mdi-pencil"></i>${esc(t('manual', 'Manual'))}</span>`
                     : `<span class="sr-chip"><i class="mdi mdi-fingerprint"></i>${esc(t('device', 'Device'))}</span>` },
                 { data: 'note', orderable: false, render: n => n ? `<span class="att-note" title="${esc(n)}">${esc(n)}</span>` : '<span class="text-muted">&ndash;</span>' },
+                <?php if ($canRowActions): ?>
                 { data: 'action', orderable: false, searchable: false, className: 'text-right', render: function(html) {
                     // Server sends a Bootstrap dropdown; restyle its toggle like the other sr pages.
                     return String(html || '').replace('table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm', 'sr-more-btn dropdown-toggle arrow-none')
                         .replace('mdi-dots-horizontal', 'mdi-dots-vertical');
                 } }
+                <?php endif; ?>
             ],
             language: dtLanguage
         });

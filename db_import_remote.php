@@ -293,6 +293,17 @@ if ($res && ($row = $res->fetch_assoc())) {
         html.app-dark .dbi-alert.is-warn { background: #3a2e12; border-color: #6b5417; color: #fcd34d; }
         html.app-dark .dbi-row { border-color: #252e44; }
         html.app-dark .dbi-row-name { color: #d8dee9; }
+        /* Truncate confirm: tables to be emptied */
+        .dbt-wrap { margin-top: 14px; max-height: 260px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 10px; }
+        .dbt-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: start; }
+        .dbt-table th { position: sticky; top: 0; background: #f8fafc; color: #64748b; font-weight: 600; font-size: 12px; padding: 8px 12px; border-bottom: 1px solid #e5e7eb; text-align: start; }
+        .dbt-table td { padding: 7px 12px; border-bottom: 1px solid #f1f5f9; text-align: start; }
+        .dbt-table tr:last-child td { border-bottom: 0; }
+        .dbt-table .dbt-num { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .dbt-del { color: #dc2626; font-weight: 600; }
+        html.app-dark .dbt-wrap { border-color: #252e44; }
+        html.app-dark .dbt-table th { background: #1a2133; color: #94a3b8; border-color: #252e44; }
+        html.app-dark .dbt-table td { border-color: #252e44; }
     </style>
     <?php if ($is_rtl ?? false) : ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -606,7 +617,7 @@ if ($res && ($row = $res->fetch_assoc())) {
 
                 $tbody.append(`
                     <tr class="table-row${changed ? ' is-diff' : ''}${missing ? ' is-missing' : ''}" data-diff="${diff}" data-missing="${missing ? 1 : 0}">
-                        <td class="dbi-cb"><input type="checkbox" class="table-check" value="${name}" data-live-rows="${t.live_rows || 0}" ${changed ? 'checked' : ''}></td>
+                        <td class="dbi-cb"><input type="checkbox" class="table-check" value="${name}" data-live-rows="${t.live_rows || 0}" data-local-rows="${missing ? -1 : (t.local_rows || 0)}" ${changed ? 'checked' : ''}></td>
                         <td><span class="dbi-tname"><i class="fa-solid ${missing ? 'fa-circle-exclamation' : (changed ? 'fa-code-compare' : 'fa-table')}"></i><span class="sr-cell-title sr-mono">${name}</span></span></td>
                         <td class="dbi-num">${localLabel}</td>
                         <td class="dbi-num">${(t.live_rows || 0).toLocaleString()}</td>
@@ -1642,13 +1653,7 @@ if ($res && ($row = $res->fetch_assoc())) {
                 ? '<div class="dbs-note is-err" style="margin-bottom:10px;"><i class="fa-solid fa-circle-info"></i> Indexes were not compared - upload the latest <code>includes/api/db_export_schema.php</code> to live.</div>'
                 : '';
             const quick = idxHint + '<div class="dbs-quick">' + (ok ? '' :
-SQL query: Copy
-
--- Run on LIVE database
-ALTER TABLE `zk_attendance` ADD UNIQUE KEY `uniq_emp_punch` (`emp_id`, `punch_datetime`);
-
-MySQL said: Documentation
-#1062 - Duplicate entry '3294-2026-09-09 09:47:06' for key 'uniq_emp_punch'                '<span>Quick select:</span>' +
+                '<span>Quick select:</span>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="local"><i class="fa-solid fa-laptop-code"></i> Make Local match Live</button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="live"><i class="fa-solid fa-cloud"></i> Make Live match Local</button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="none"><i class="fa-regular fa-square"></i> Clear</button>') +
@@ -1880,11 +1885,25 @@ MySQL said: Documentation
             }
 
             if (truncate) {
+                // Every table that will be emptied, with the local rows deleted and the live rows loaded
+                let totalLocal = 0;
+                const rows = $('.table-check:checked').map(function() {
+                    const local = parseInt($(this).data('local-rows'), 10);
+                    const live = parseInt($(this).data('live-rows'), 10) || 0;
+                    if (local > 0) totalLocal += local;
+                    return '<tr><td class="sr-mono">' + escHtml(this.value) + '</td>' +
+                        '<td class="dbt-num">' + (local < 0 ? '<span class="sr-pill sr-pill-xs tone-slate">new table</span>' : '<span class="dbt-del">' + local.toLocaleString() + '</span>') + '</td>' +
+                        '<td class="dbt-num">' + live.toLocaleString() + '</td></tr>';
+                }).get().join('');
                 Swal.fire({
                     title: 'Truncate before import?',
                     icon: 'warning',
-                    html: 'This deletes ALL local rows in <b>' + tables.length + ' table(s)</b> first, then loads live data. ' +
-                        'Any row that exists only locally will be permanently lost. This cannot be undone.',
+                    width: 620,
+                    html: '<div style="text-align:start">This deletes ALL local rows in <b>' + tables.length + ' table(s)</b> first' +
+                        (totalLocal ? ' (<b>' + totalLocal.toLocaleString() + '</b> rows)' : '') + ', then loads live data. ' +
+                        'Any row that exists only locally will be permanently lost. This cannot be undone.</div>' +
+                        '<div class="dbt-wrap"><table class="dbt-table"><thead><tr><th>Table</th><th class="dbt-num">Local rows deleted</th><th class="dbt-num">Live rows loaded</th></tr></thead>' +
+                        '<tbody>' + rows + '</tbody></table></div>',
                     showCancelButton: true,
                     confirmButtonText: 'Truncate & Import',
                     confirmButtonColor: '#dc3545',

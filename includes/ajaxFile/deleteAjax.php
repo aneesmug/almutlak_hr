@@ -21,7 +21,7 @@ const SPECIAL_ACCESS_DELETE_KEYS = [
     'cars'        => 'cars_delete',
     'section'     => 'locations_delete',
     'asset_items' => 'asset_inventory_delete',
-    'attendance'  => 'manage_attendance',
+    'attendance'  => 'delete_attendance_record', // attendance.php + Employee Master > Attendance tab
     'emp_docu'    => 'delete_employee_documents', // Employee Master > Documents tab
 ];
 // 2. File Path Mapping:
