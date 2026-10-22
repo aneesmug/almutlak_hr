@@ -95,6 +95,32 @@ if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
 	}
 }
 
+// Vacation due (amount): what the current balance is worth, same formula as the EOS calculator
+// (includes/ajaxFile/ajax_eos_calculator_local.php): (monthly salary / 30) x balance days.
+// Monthly salary = employees.salary, falling back to the active emp_salary components.
+// Salary-derived: visible to sys admin, HR, or an explicitly granted 'view_employee_vacation_due'
+// special access (App Settings -> Special Access), same pattern as the EOS value.
+$vacDueAmount = null;
+$vacDailyRate = 0.0;
+$canSeeVacDue = (
+	($is_system_admin ?? false) || ($isHR ?? false) || ($isDeptHr ?? false)
+	|| user_has_special_access($conDB, $empid ?? '', 'view_employee_vacation_due', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+if ($canSeeVacDue && $emprow['status'] == 1 && !empty($empid_for_calc)) {
+	$vacMonthly = (float)($emprow['salary'] ?? 0);
+	if ($vacMonthly <= 0) {
+		$slryRes = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' AND `status` = 1 ORDER BY `id` DESC LIMIT 1");
+		$slry = $slryRes ? (mysqli_fetch_assoc($slryRes) ?: []) : [];
+		foreach (['basic', 'housing', 'transport', 'food', 'misc', 'cashier', 'fuel', 'tel', 'guard', 'other'] as $comp) {
+			$vacMonthly += (float)($slry[$comp] ?? 0);
+		}
+	}
+	if ($vacMonthly > 0) {
+		$vacDailyRate = $vacMonthly / 30;
+		$vacDueAmount = round($vacDailyRate * max(0, $displayBalance), 2);
+	}
+}
+
 // Build More Actions menu HTML organized by categories
 $moreActionsHtml = '';
 // Actions are collected per section, then rendered as titled groups at the end (view_employee.php styles them).
@@ -426,6 +452,12 @@ if ($isEmployee !== true) {
 					<div class="eh-stat"><i class="fa fa-hashtag"></i><div><b><?= htmlspecialchars($emprow['empid']) ?></b><small><?= __('employee_no') ?></small></div></div>
 					<div class="eh-stat"><i class="fa fa-calendar-days"></i><div><b><?= htmlspecialchars((string)$emprow['vacation_days']) ?></b><small><?= __('vacation_days') ?></small></div></div>
 					<div class="eh-stat"><i class="fa fa-umbrella-beach"></i><div><b><?= number_format($displayBalance, 2) ?></b><small><?= __('balance_vacations') ?></small></div></div>
+					<?php if ($vacDueAmount !== null): ?>
+						<div class="eh-stat" title="<?= htmlspecialchars(sprintf(__('vacation_due_hint', '%1$s days x %2$s daily salary (monthly salary / 30)'), number_format($displayBalance, 2), number_format($vacDailyRate, 2)), ENT_QUOTES) ?>">
+							<i class="fa fa-sack-dollar"></i>
+							<div><b><?= number_format($vacDueAmount, 2) ?> <span style="font-size: .7em; opacity: .85;"><?= __('sar', 'SAR') ?></span></b><small><?= __('vacation_due', 'Vacation Due') ?></small></div>
+						</div>
+					<?php endif; ?>
 					<div class="eh-stat" title="<?= $eh_join_ts ? date('d M Y', $eh_join_ts) : '' ?>"><i class="fa fa-calendar-check"></i><div><b><?= $eh_join_ts ? date('Y', $eh_join_ts) : '-' ?></b><small><?= __('joining_date') ?></small></div></div>
 				</div>
 
