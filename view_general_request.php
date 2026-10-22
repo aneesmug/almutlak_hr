@@ -206,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (!$can_modify_items) {
             header('Content-Type: application/json; charset=utf-8');
             http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Unauthorized to modify items']);
+            echo json_encode(['status' => 'error', 'message' => __('unauthorized_to_modify_items', 'You are not allowed to change the items of this request.')]);
             exit;
         }
         $item_id = intval($_POST['item_id'] ?? 0);
@@ -214,12 +214,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $delete_result = mysqli_query($conDB, "DELETE FROM general_request_items WHERE id = $item_id AND request_inv_no = '".escape_string($inv_no)."'");
             if ($delete_result) {
                 header('Content-Type: application/json; charset=utf-8');
-                echo json_encode(['status' => 'success', 'message' => 'Item removed successfully']);
+                echo json_encode(['status' => 'success', 'message' => __('item_removed_successfully', 'Item removed successfully')]);
                 exit;
             }
         }
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['status' => 'error', 'message' => 'Failed to delete item']);
+        echo json_encode(['status' => 'error', 'message' => __('failed_to_delete_item', 'Failed to delete item')]);
         exit;
     }
     
@@ -228,7 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (!$can_modify_items) {
             header('Content-Type: application/json; charset=utf-8');
             http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Unauthorized to modify items']);
+            echo json_encode(['status' => 'error', 'message' => __('unauthorized_to_modify_items', 'You are not allowed to change the items of this request.')]);
             exit;
         }
         $item_id = intval($_POST['item_id'] ?? 0);
@@ -237,12 +237,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $update_result = mysqli_query($conDB, "UPDATE general_request_items SET quantity = $new_quantity WHERE id = $item_id AND request_inv_no = '".escape_string($inv_no)."'");
             if ($update_result) {
                 header('Content-Type: application/json; charset=utf-8');
-                echo json_encode(['status' => 'success', 'message' => 'Quantity updated successfully']);
+                echo json_encode(['status' => 'success', 'message' => __('item_quantity_updated', 'Item quantity updated')]);
                 exit;
             }
         }
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['status' => 'error', 'message' => 'Failed to update quantity']);
+        echo json_encode(['status' => 'error', 'message' => __('failed_to_update_quantity', 'Failed to update quantity')]);
         exit;
     }
     
@@ -421,6 +421,8 @@ $sr_initials = function ($name) {
 };
 
 $h = function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES); };
+gr_ensure_company_column($conDB);
+$company_name = gr_company_name($conDB, $request['comp_no'] ?? 0);
 $total_qty = array_sum(array_map(function ($it) { return (int)$it['quantity']; }, $items));
 $chain_approved = count(array_filter($approval_chain, function ($s) { return $s['status'] == 'approved'; }));
 ?>
@@ -457,7 +459,7 @@ $chain_approved = count(array_filter($approval_chain, function ($s) { return $s[
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
     <script>
-        window.departmentMap = <?= json_encode($department_map ?? []) ?>;
+        window.departmentMap = <?= json_encode(array_map('getDisplayName', $department_map ?? [])) ?>;
         window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
     </script>
 </head>
@@ -520,16 +522,20 @@ $chain_approved = count(array_filter($approval_chain, function ($s) { return $s[
 
                         <div class="sr-meta">
                             <div class="sr-meta-item">
+                                <div class="sr-meta-label"><i class="mdi mdi-domain"></i> <?= __('company', 'Company') ?></div>
+                                <div class="sr-meta-value" title="<?= $h($company_name) ?>"><?= $h($company_name ?: '-') ?></div>
+                            </div>
+                            <div class="sr-meta-item">
                                 <div class="sr-meta-label"><i class="mdi mdi-calendar"></i> <?= __('request_date', 'Request Date') ?></div>
                                 <div class="sr-meta-value"><?= !empty($request['created_at']) ? date('d M Y', strtotime($request['created_at'])) : '-' ?></div>
                             </div>
                             <div class="sr-meta-item">
                                 <div class="sr-meta-label"><i class="mdi mdi-arrow-right"></i> <?= __('target_department', 'Target Department') ?></div>
-                                <div class="sr-meta-value" title="<?= $h($request['department_to']) ?>"><?= $h(getDisplayName($request['department_to']) ?: '-') ?></div>
+                                <div class="sr-meta-value" title="<?= $h($request['department_to']) ?>"><?= $h(gr_department_label($request['department_to']) ?: '-') ?></div>
                             </div>
                             <div class="sr-meta-item">
                                 <div class="sr-meta-label"><i class="mdi mdi-tag-outline"></i> <?= __('category', 'Category') ?></div>
-                                <div class="sr-meta-value"><?= $h(getDisplayName($request['request_category']) ?: '-') ?></div>
+                                <div class="sr-meta-value"><?= $h(gr_category_label($request['request_category']) ?: '-') ?></div>
                             </div>
                             <div class="sr-meta-item">
                                 <div class="sr-meta-label"><i class="mdi mdi-domain"></i> <?= __('requester_department', 'Requester Department') ?></div>
@@ -967,11 +973,11 @@ $chain_approved = count(array_filter($approval_chain, function ($s) { return $s[
         function getRoleText(userType) {
             if (!userType) return '';
             switch (userType.toLowerCase()) {
-                case 'dept_user': return 'Manager';
-                case 'assistant': return 'Assistant';
-                case 'gm': return 'General Manager';
-                case 'hr': return 'HR';
-                case 'administrator': return 'Admin';
+                case 'dept_user': return __('manager', 'Manager');
+                case 'assistant': return __('assistant', 'Assistant');
+                case 'gm': return __('general_manager', 'General Manager');
+                case 'hr': return __('hr', 'HR');
+                case 'administrator': return __('administrator', 'Admin');
                 default: return userType.charAt(0).toUpperCase() + userType.slice(1);
             }
         }

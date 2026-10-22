@@ -82,3 +82,56 @@ function gr_delivery_statuses() {
         'canceled'  => [__('canceled', 'Canceled'), 'tone-red', 'mdi-close-circle'],
     ];
 }
+
+// general_requests.comp_no = companies.comp_id (same meaning as employees.comp_no): the company
+// the request is raised for. Added on first use (SQL copy: db/migrations/20261022_general_requests_company.sql).
+function gr_ensure_company_column($conDB) {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    $res = @mysqli_query($conDB, "SHOW COLUMNS FROM `general_requests` LIKE 'comp_no'");
+    if ($res && mysqli_num_rows($res) === 0) {
+        if (@mysqli_query($conDB, "ALTER TABLE `general_requests` ADD COLUMN `comp_no` INT NULL DEFAULT NULL AFTER `user_dept`, ADD INDEX `idx_comp_no` (`comp_no`)")) {
+            // Older requests: use the requester's company
+            @mysqli_query($conDB, "UPDATE `general_requests` gr JOIN `employees` e ON e.`emp_id` = gr.`emp_id` SET gr.`comp_no` = e.`comp_no` WHERE gr.`comp_no` IS NULL");
+        }
+    }
+}
+
+// Companies the current user may raise a request for: comp_id => label (Arabic name in RTL).
+// Limited to the user's allowed companies when they have a restriction (session_check.php).
+function gr_company_options($conDB) {
+    global $allowed_companies_array, $is_rtl;
+    $where = '';
+    if (!empty($allowed_companies_array)) {
+        $where = ' WHERE `comp_id` IN (' . implode(',', array_map('intval', $allowed_companies_array)) . ')';
+    }
+    $out = [];
+    $res = mysqli_query($conDB, "SELECT `comp_id`, `comp_name`, `comp_name_ar` FROM `companies`" . $where . " ORDER BY `comp_name`");
+    while ($res && ($r = mysqli_fetch_assoc($res))) {
+        $out[(int)$r['comp_id']] = (($is_rtl ?? false) && !empty($r['comp_name_ar'])) ? $r['comp_name_ar'] : $r['comp_name'];
+    }
+    return $out;
+}
+
+// Display name of one company (comp_id), '' when unknown.
+function gr_company_name($conDB, $comp_no) {
+    global $is_rtl;
+    if (!$comp_no) return '';
+    $res = mysqli_query($conDB, "SELECT `comp_name`, `comp_name_ar` FROM `companies` WHERE `comp_id` = " . (int)$comp_no . " LIMIT 1");
+    $r = $res ? mysqli_fetch_assoc($res) : null;
+    if (!$r) return '';
+    return (($is_rtl ?? false) && !empty($r['comp_name_ar'])) ? $r['comp_name_ar'] : $r['comp_name'];
+}
+
+// Display label of a stored target department / category: translated label for the known values,
+// getDisplayName() for anything else (older or free-text values).
+function gr_department_label($value) {
+    $map = gr_target_departments();
+    if ($value === 'Information Technology') $value = 'IT';
+    return $map[$value] ?? getDisplayName((string)$value);
+}
+function gr_category_label($value) {
+    $map = gr_categories();
+    return $map[$value] ?? getDisplayName((string)$value);
+}

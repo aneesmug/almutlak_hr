@@ -62,7 +62,7 @@ try {
         }
 
         // Validate required fields
-        if (empty($_POST['inv_no']) || empty($_POST['request_title']) || empty($_POST['department_to']) || empty($_POST['request_category']) || empty($_POST['priority'])) {
+        if (empty($_POST['inv_no']) || empty($_POST['request_title']) || empty($_POST['department_to']) || empty($_POST['request_category']) || empty($_POST['priority']) || empty($_POST['comp_no'])) {
             $response['message'] = __('fill_out_form_error', 'Please fill all required fields');
             echo json_encode($response);
             exit;
@@ -84,16 +84,26 @@ try {
         $description = mysqli_real_escape_string($conDB, $_POST['description'] ?? '');
         $emp_name = mysqli_real_escape_string($conDB, $_POST['emp_name']);
         $user_dept = (int)$_POST['user_dept'];
-        
+
+        // Company the request is raised for - must be one this user may use
+        require_once __DIR__ . '/../general_request_helpers.php';
+        gr_ensure_company_column($conDB);
+        $comp_no = (int)($_POST['comp_no'] ?? 0);
+        if ($comp_no <= 0 || !array_key_exists($comp_no, gr_company_options($conDB))) {
+            $response['message'] = __('select_valid_company', 'Please select a valid company');
+            echo json_encode($response);
+            exit;
+        }
+
         // Start transaction
         mysqli_begin_transaction($conDB);
         
         try {
             // Insert main request
             $insert_request = "INSERT INTO `general_requests` 
-                (`inv_no`, `request_title`, `department_to`, `request_category`, `priority`, `description`, `emp_id`, `emp_name`, `user_dept`, `current_status`)
-                VALUES 
-                ('$inv_no', '$request_title', '$department_to', '$request_category', '$priority', '$description', '$emp_id', '$emp_name', '$user_dept', 'draft')";
+                (`inv_no`, `request_title`, `department_to`, `request_category`, `priority`, `description`, `emp_id`, `emp_name`, `user_dept`, `comp_no`, `current_status`)
+                VALUES
+                ('$inv_no', '$request_title', '$department_to', '$request_category', '$priority', '$description', '$emp_id', '$emp_name', '$user_dept', $comp_no, 'draft')";
             
             if (!mysqli_query($conDB, $insert_request)) {
                 throw new Exception(__('failed_to_create_request', 'Failed to create request'));
@@ -221,7 +231,7 @@ try {
 
         $cancellable_statuses = ['draft', 'pending_approval', 'approved'];
         if (!in_array($request_data['current_status'], $cancellable_statuses, true)) {
-            $response['message'] = 'Request in status "' . $request_data['current_status'] . '" cannot be cancelled.';
+            $response['message'] = __('request_status_cannot_be_cancelled', 'This request can no longer be cancelled in its current status.');
             echo json_encode($response);
             exit;
         }
@@ -233,7 +243,7 @@ try {
         mysqli_stmt_close($update);
 
         if ($affected <= 0) {
-            $response['message'] = 'Failed to cancel request - status may have changed.';
+            $response['message'] = __('failed_to_cancel_request_status_changed', 'Failed to cancel request - status may have changed.');
             echo json_encode($response);
             exit;
         }
@@ -250,7 +260,7 @@ try {
         mysqli_stmt_close($ra);
 
         $response['success'] = true;
-        $response['message'] = 'Your request has been cancelled successfully.';
+        $response['message'] = __('request_cancelled_successfully', 'Your request has been cancelled successfully.');
         echo json_encode($response);
         exit;
     }
@@ -434,13 +444,15 @@ try {
         
         $employees = [];
         while ($row = mysqli_fetch_assoc($result)) {
-            $dept_info = !empty($row['department']) ? ' - ' . htmlspecialchars($row['department']) : '';
+            // Plain text (select2 escapes it); names/departments in the viewer's language
+            $name = getDisplayName($row['name']);
+            $department = getDisplayName($row['department']);
             $employees[] = [
                 'id' => $row['emp_id'],
-                'text' => htmlspecialchars($row['name']) . ' (' . $row['emp_id'] . ')' . $dept_info,
-                'name' => $row['name'],
+                'text' => $name . ' (' . $row['emp_id'] . ')',
+                'name' => $name,
                 'emp_id' => $row['emp_id'],
-                'department' => $row['department']
+                'department' => $department
             ];
         }
         

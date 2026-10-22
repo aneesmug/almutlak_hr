@@ -39,6 +39,11 @@ if (!isset($_GET['id']) || $_GET['id'] === '') {
     exit;
 }
 $inv_no = (string)$_GET['id'];
+
+// Company the request is raised for (defaults to the user's own company when allowed)
+gr_ensure_company_column($conDB);
+$company_options = gr_company_options($conDB);
+$default_company = isset($company_options[(int)($user_company ?? 0)]) ? (int)$user_company : (count($company_options) === 1 ? (int)array_key_first($company_options) : 0);
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -49,6 +54,8 @@ $inv_no = (string)$_GET['id'];
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
+
+    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
 
     <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -75,6 +82,19 @@ $inv_no = (string)$_GET['id'];
         .gr-new .sr-fsec .sr-addlines .gr-item:last-child { margin-bottom: 14px; }
         .gr-new .gr-file-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
         .gr-new .gr-file-list:empty { display: none; }
+        /* Priority choices take their tone colour (low=sky, medium=indigo, high=amber, urgent=red) */
+        .gr-new .gr-pri.tone-sky    { --pri-fg: var(--tone-sky-fg);    --pri-bg: var(--tone-sky-bg);    --pri-bd: var(--tone-sky-bd); }
+        .gr-new .gr-pri.tone-indigo { --pri-fg: var(--tone-indigo-fg); --pri-bg: var(--tone-indigo-bg); --pri-bd: var(--tone-indigo-bd); }
+        .gr-new .gr-pri.tone-amber  { --pri-fg: var(--tone-amber-fg);  --pri-bg: var(--tone-amber-bg);  --pri-bd: var(--tone-amber-bd); }
+        .gr-new .gr-pri.tone-red    { --pri-fg: var(--tone-red-fg);    --pri-bg: var(--tone-red-bg);    --pri-bd: var(--tone-red-bd); }
+        .gr-new .gr-pri span i { color: var(--pri-fg); }
+        .gr-new .gr-pri span:hover { border-color: var(--pri-bd); }
+        .gr-new .gr-pri input:checked + span {
+            border-color: var(--pri-fg); background: var(--pri-bg); color: var(--pri-fg);
+            box-shadow: 0 0 0 1px var(--pri-fg) inset;
+        }
+        .gr-new .gr-pri input:checked + span i { color: var(--pri-fg); }
+        .gr-new .select2-container .select2-selection.is-invalid { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .12); }
         .gr-new .gr-submit-bar { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
     </style>
 
@@ -135,15 +155,24 @@ $inv_no = (string)$_GET['id'];
                                         <div class="sr-fcol c-12">
                                             <div class="sr-newreq-info mb-0">
                                                 <span><i class="mdi mdi-calendar"></i> <?= __('request_date', 'Request Date') ?>: <b><?= date('d M Y') ?></b></span>
-                                                <span><i class="mdi mdi-account-outline"></i> <?= __('requester_name', 'Requester Name') ?>: <b><?= htmlspecialchars((string)$userwel) ?></b></span>
-                                                <span><i class="mdi mdi-domain"></i> <?= __('requester_department', 'Requester Department') ?>: <b><?= htmlspecialchars((string)$dept_name) ?></b></span>
+                                                <span><i class="mdi mdi-account-outline"></i> <?= __('requester_name', 'Requester Name') ?>: <b><?= htmlspecialchars(getDisplayName((string)$userwel)) ?></b></span>
+                                                <span><i class="mdi mdi-domain"></i> <?= __('requester_department', 'Requester Department') ?>: <b><?= htmlspecialchars(getDisplayName((string)$dept_name)) ?></b></span>
                                             </div>
                                         </div>
                                         <div class="sr-fcol c-12">
                                             <label for="f_request_title"><?= __('request_title', 'Request Title') ?> <span class="text-danger">*</span></label>
                                             <input type="text" name="request_title" id="f_request_title" class="form-control" maxlength="250" data-required="1" placeholder="<?= htmlspecialchars(__('enter_request_title', 'Enter request title'), ENT_QUOTES) ?>">
                                         </div>
-                                        <div class="sr-fcol c-6">
+                                        <div class="sr-fcol c-4">
+                                            <label for="f_comp_no"><?= __('company', 'Company') ?> <span class="text-danger">*</span></label>
+                                            <select name="comp_no" id="f_comp_no" class="form-control" data-required="1" data-placeholder="<?= htmlspecialchars(__('select_company', 'Select company'), ENT_QUOTES) ?>">
+                                                <option value=""></option>
+                                                <?php foreach ($company_options as $cid => $cname): ?>
+                                                    <option value="<?= $cid ?>"<?= $cid === $default_company ? ' selected' : '' ?>><?= htmlspecialchars($cname) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="sr-fcol c-4">
                                             <label for="f_department_to"><?= __('target_department', 'Target Department') ?> <span class="text-danger">*</span></label>
                                             <select name="department_to" id="f_department_to" class="form-control" data-required="1">
                                                 <option value=""><?= __('select') ?></option>
@@ -152,7 +181,7 @@ $inv_no = (string)$_GET['id'];
                                                 <?php endforeach; ?>
                                             </select>
                                         </div>
-                                        <div class="sr-fcol c-6">
+                                        <div class="sr-fcol c-4">
                                             <label for="f_request_category"><?= __('request_category', 'Request Category') ?> <span class="text-danger">*</span></label>
                                             <select name="request_category" id="f_request_category" class="form-control" data-required="1">
                                                 <option value=""><?= __('select') ?></option>
@@ -166,7 +195,7 @@ $inv_no = (string)$_GET['id'];
                                             <div class="sr-attach-choice" style="grid-template-columns: repeat(4, minmax(0, 1fr));">
                                                 <?php $pri_icons = ['low' => 'mdi-flag-outline', 'medium' => 'mdi-flag', 'high' => 'mdi-flag', 'urgent' => 'mdi-flag'];
                                                 foreach (gr_priorities() as $v => $p): ?>
-                                                    <label class="sr-choice">
+                                                    <label class="sr-choice gr-pri <?= $p[1] ?>">
                                                         <input type="radio" name="priority" value="<?= $v ?>"<?= $v === 'medium' ? ' checked' : '' ?>>
                                                         <span><i class="mdi <?= $pri_icons[$v] ?>"></i> <?= htmlspecialchars($p[0]) ?></span>
                                                     </label>
@@ -225,7 +254,7 @@ $inv_no = (string)$_GET['id'];
                                     </div>
                                     <div class="sr-card-body">
                                         <ol class="sr-guide">
-                                            <li><?= __('gr_step_details', 'Fill in the title, target department, category and priority.') ?></li>
+                                            <li><?= __('gr_step_details', 'Fill in the title, company, target department, category and priority.') ?></li>
                                             <li><?= __('gr_step_items', 'Add each item you need with its quantity and specifications.') ?></li>
                                             <li><?= __('gr_step_draft', 'Save the request. It stays a draft until you submit it.') ?></li>
                                             <li><?= __('gr_step_approvers', 'On the next page, choose the approvers in order and submit for approval.') ?></li>
@@ -250,6 +279,7 @@ $inv_no = (string)$_GET['id'];
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
+    <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script src="assets/js/gr_item_suggest.js?v=<?= @filemtime(__DIR__ . '/assets/js/gr_item_suggest.js') ?>"></script>
@@ -332,10 +362,18 @@ $inv_no = (string)$_GET['id'];
                 $(this).find('[data-f]').each(function () {
                     $(this).attr('name', 'items[' + (i + 1) + '][' + $(this).data('f') + ']');
                 });
-                $(this).find('.gr-remove').prop('disabled', $rows.length === 1);
+                // First row is never removable: hide its "-" (space kept so all rows stay aligned)
+                $(this).find('.gr-remove').css('visibility', i === 0 ? 'hidden' : 'visible');
             });
             $('#grItemCount').text($rows.length);
         }
+
+        $('#f_comp_no').select2({
+            placeholder: $('#f_comp_no').data('placeholder'),
+            width: '100%'
+        }).on('change', function () {
+            $(this).next('.select2-container').find('.select2-selection').removeClass('is-invalid');
+        });
 
         // Item Name auto-fill from earlier requests; picking one also fills Type and Specifications
         GRItemSuggest.bind($items, {
@@ -356,7 +394,7 @@ $inv_no = (string)$_GET['id'];
             addItem(true, $(this).closest('.gr-item'));
         });
         $items.on('click', '.gr-remove', function () {
-            if ($items.children('.gr-item').length <= 1) return;
+            if ($(this).closest('.gr-item').index() === 0) return;
             $(this).closest('.gr-item').remove();
             renumber();
         });
@@ -415,8 +453,14 @@ $inv_no = (string)$_GET['id'];
                 }
             });
             $bad.addClass('is-invalid');
+            // select2 hides the real <select>: mark its visible box instead
+            $('#f_comp_no').next('.select2-container').find('.select2-selection').toggleClass('is-invalid', $bad.is('#f_comp_no'));
             if ($items.children('.gr-item').length === 0) { fail(T.oneItem); return; }
-            if ($bad.length) { $bad.first().trigger('focus'); fail(T.required); return; }
+            if ($bad.length) {
+                if (!$bad.first().is('#f_comp_no')) $bad.first().trigger('focus');
+                fail(T.required);
+                return;
+            }
 
             $('#submitBtn').prop('disabled', true).html('<i class="mdi mdi-loading mdi-spin"></i> ' + esc(T.submitting) + '...');
 

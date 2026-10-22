@@ -300,8 +300,11 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                         data: 'request_title',
                         render: function (data, type, row) {
                             if (type !== 'display') return data;
+                            var sub = [];
+                            if (row.company) sub.push('<i class="mdi mdi-domain"></i>' + esc(row.company));
+                            if (row.request_category) sub.push('<i class="mdi mdi-tag-outline"></i>' + esc(row.request_category));
                             return '<span class="sr-cell-title" title="' + esc(data) + '">' + esc(data) + '</span>'
-                                + (row.request_category ? '<span class="sr-cell-sub"><i class="mdi mdi-tag-outline"></i>' + esc(row.request_category) + '</span>' : '');
+                                + (sub.length ? '<span class="sr-cell-sub">' + sub.join(' &middot; ') + '</span>' : '');
                         }
                     },
                     { data: 'department_to', render: function (data, type) { return type === 'display' ? esc(data) : data; } },

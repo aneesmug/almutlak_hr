@@ -2,6 +2,8 @@
 
 include './../../includes/session_check.php';
 require_once __DIR__ . '/../special_access_helper.php';
+require_once __DIR__ . '/../general_request_helpers.php';
+gr_ensure_company_column($conDB);
 
 // Real, session-derived permission for the delete/cancel action button - captured BEFORE
 // $user_type below is overwritten with the client-supplied POST value used for row filtering.
@@ -33,6 +35,7 @@ if($searchValue != ''){
         OR `gr`.`department_to` LIKE '%".$searchValue."%'
         OR `gr`.`request_category` LIKE '%".$searchValue."%'
         OR `gr`.`emp_name` LIKE '%".$searchValue."%'
+        OR `co`.`comp_name` LIKE '%".$searchValue."%'
     )";
 }
 
@@ -53,6 +56,7 @@ if ($type_query && mysqli_num_rows($type_query) > 0) {
 // Base SQL with joins for approval chain
 $baseSql = "FROM `general_requests` `gr`
             LEFT JOIN `department` `dept` ON `dept`.`id` = `gr`.`user_dept`
+            LEFT JOIN `companies` `co` ON `co`.`comp_id` = `gr`.`comp_no`
             LEFT JOIN `request_approvers` `ra` ON `gr`.`inv_no` = `ra`.`request_inv_no`
                 AND `ra`.`request_type_id` = ".(int)$request_type_id."
                 AND `gr`.`current_approval_level` = `ra`.`approval_level`
@@ -102,6 +106,8 @@ $sql = "SELECT
             `gr`.`department_to`,
             `gr`.`request_category`,
             `gr`.`priority`,
+            `co`.`comp_name`,
+            `co`.`comp_name_ar`,
             `gr`.`emp_name`,
             `gr`.`emp_id`,
             `gr`.`created_at`,
@@ -167,10 +173,11 @@ if ($query) {
             "id"                     => $row['id'],
             "inv_no"                 => $row['inv_no'],
             "request_title"          => $row['request_title'],
-            "department_to"          => $row['department_to'],
-            "request_category"       => $row['request_category'],
+            "department_to"          => gr_department_label($row['department_to']),
+            "request_category"       => gr_category_label($row['request_category']),
+            "company"                => (($is_rtl ?? false) && !empty($row['comp_name_ar'])) ? $row['comp_name_ar'] : (string)($row['comp_name'] ?? ''),
             "priority"               => $row['priority'],
-            "emp_name"               => $row['emp_name'],
+            "emp_name"               => getDisplayName($row['emp_name']),
             "created_at"             => date("Y-m-d", strtotime($row["created_at"])),
             "created_ago"            => (($current_lang ?? 'en') === 'ar' && function_exists('timeAgoAr')) ? timeAgoAr($row["created_at"]) : (function_exists('timeAgo') ? timeAgo($row["created_at"]) : ''),
             "current_status"         => $row["current_status"],
