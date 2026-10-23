@@ -312,24 +312,40 @@ if (!function_exists('ip_rule_matches')) {
         return $known;
     }
 
-    /** Sign-in activity per IP for the tab (last $days days), newest first. */
+    /**
+     * Sign-in activity per IP for the tab (last $days days), newest first.
+     * users = every ID tried from that IP: [{id, name, ok, failed, last_seen}], newest first.
+     */
     function ip_guard_activity($conDB, int $days = 7, int $limit = 60): array
     {
-        $res = @$conDB->query("SELECT ip_address AS ip, SUM(success = 1) AS ok, SUM(success = 0) AS failed, COUNT(DISTINCT identifier) AS ids,
-                GROUP_CONCAT(DISTINCT identifier ORDER BY id DESC SEPARATOR ',') AS who, MAX(created_at) AS last_seen
-            FROM login_attempts
-            WHERE created_at > DATE_SUB(NOW(), INTERVAL " . (int) $days . " DAY) AND identifier NOT LIKE '%:%'
-            GROUP BY ip_address ORDER BY last_seen DESC LIMIT " . (int) $limit);
+        $since = "created_at > DATE_SUB(NOW(), INTERVAL " . (int) $days . " DAY) AND identifier NOT LIKE '%:%'";
+        $res = @$conDB->query("SELECT ip_address AS ip, SUM(success = 1) AS ok, SUM(success = 0) AS failed, COUNT(DISTINCT identifier) AS ids, MAX(created_at) AS last_seen
+            FROM login_attempts WHERE $since GROUP BY ip_address ORDER BY last_seen DESC LIMIT " . (int) $limit);
         $rows = [];
-        $allIds = [];
         while ($res && ($row = $res->fetch_assoc())) {
-            $row['who'] = array_slice(array_filter(explode(',', (string) $row['who'])), 0, 6);
-            $allIds = array_merge($allIds, $row['who']);
-            $rows[] = $row;
+            $row['users'] = [];
+            $rows[$row['ip']] = $row;
         }
+        if (!$rows) {
+            return [];
+        }
+        // Per IP + ID
+        $ips = array_map('strval', array_keys($rows));
+        $in = implode(',', array_fill(0, count($ips), '?'));
+        $stmt = $conDB->prepare("SELECT ip_address AS ip, identifier AS id, SUM(success = 1) AS ok, SUM(success = 0) AS failed, MAX(created_at) AS last_seen
+            FROM login_attempts WHERE $since AND ip_address IN ($in) GROUP BY ip_address, identifier ORDER BY last_seen DESC");
+        $stmt->bind_param(str_repeat('s', count($ips)), ...$ips);
+        $stmt->execute();
+        $r = $stmt->get_result();
+        $allIds = [];
+        while ($u = $r->fetch_assoc()) {
+            $rows[$u['ip']]['users'][] = ['id' => (string) $u['id'], 'name' => '', 'ok' => (int) $u['ok'], 'failed' => (int) $u['failed'], 'last_seen' => $u['last_seen']];
+            $allIds[(string) $u['id']] = true;
+        }
+        $stmt->close();
         // ID -> name
         $names = [];
-        $allIds = array_values(array_unique($allIds));
+        $allIds = array_map('strval', array_keys($allIds));
         if ($allIds) {
             $in = implode(',', array_fill(0, count($allIds), '?'));
             $stmt = $conDB->prepare("SELECT a.id_iqama, COALESCE(e.name, a.fullname) AS name FROM admin_login a LEFT JOIN employees e ON e.emp_id = a.emp_id WHERE a.id_iqama IN ($in)");
@@ -343,18 +359,20 @@ if (!function_exists('ip_rule_matches')) {
         }
         $rules = ip_rules_list($conDB);
         foreach ($rows as &$row) {
-            $row['users'] = array_map(fn($id) => ['id' => $id, 'name' => $names[$id] ?? ''], $row['who']);
-            unset($row['who']);
+            foreach ($row['users'] as &$u) {
+                $u['name'] = $names[$u['id']] ?? '';
+            }
+            unset($u);
             $row['rule'] = '';
             foreach ($rules as $rule) {
-                if (ip_rule_matches($row['ip'], $rule['ip'])) {
+                if (ip_rule_matches((string) $row['ip'], $rule['ip'])) {
                     $row['rule'] = $rule['rule'];
                     break;
                 }
             }
         }
         unset($row);
-        return $rows;
+        return array_values($rows);
     }
 
     // ---------------------------------------------------------------- office-only mode

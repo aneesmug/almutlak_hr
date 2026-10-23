@@ -4781,8 +4781,38 @@ function __(key, def) {
                 body: new URLSearchParams(params)
             }).then(r => r.json());
             let state = null; // { settings, blocked, trusted, activity, my_ip }
-            let showAllActivity = false;
-            const ACTIVITY_ROWS = 15;
+            const USERS_SHOWN = 3; // names listed in the activity table; the rest open in a popup
+
+            // All IDs tried from one IP (name, ID, signed in, failed, last seen), searchable
+            const showIpUsers = (ip) => {
+                const a = state.activity.find(x => x.ip === ip);
+                if (!a) return;
+                const rowsHtml = a.users.map(u => `<tr data-q="${escapeHtml(((u.name || '') + ' ' + u.id).toLowerCase())}">
+                        <td><b>${escapeHtml(u.name || '-')}</b><div class="sr-mono text-muted" style="font-size:11.5px">${escapeHtml(u.id)}</div></td>
+                        <td class="text-center"><span class="sr-pill tone-${u.ok ? 'green' : 'slate'}">${u.ok}</span></td>
+                        <td class="text-center"><span class="sr-pill tone-${u.failed ? 'red' : 'slate'}">${u.failed}</span></td>
+                        <td class="sr-mono" style="white-space:nowrap">${escapeHtml(u.last_seen)}</td>
+                    </tr>`).join('');
+                Swal.fire({
+                    title: `<div class="ipsec-pop-head"><i class="mdi mdi-earth"></i><div><b class="sr-mono">${escapeHtml(ip)}</b><small>${a.users.length} ${__('ip_sec_users', 'Users')} · ${__('ip_sec_activity_7d', 'last 7 days')}</small></div></div>`,
+                    html: `<input type="search" class="form-control form-control-sm ipsec-pop-search" placeholder="${escapeHtml(__('search', 'Search'))}...">
+                        <div class="ipsec-pop-list"><table class="sr-table table mb-0">
+                            <thead><tr><th>${__('ip_sec_users', 'Users')}</th><th class="text-center">${__('ip_sec_ok', 'Signed in')}</th><th class="text-center">${__('ip_sec_failed', 'Failed')}</th><th>${__('ip_sec_last_seen', 'Last seen')}</th></tr></thead>
+                            <tbody>${rowsHtml}</tbody>
+                        </table></div>`,
+                    width: 'min(720px, 96vw)',
+                    showCloseButton: true,
+                    showConfirmButton: false,
+                    customClass: { container: 'sr-page', popup: 'ipsec-pop' }, // sr-page: colour tokens for the pills
+                    didOpen: (popup) => {
+                        const input = popup.querySelector('.ipsec-pop-search');
+                        input.addEventListener('input', () => {
+                            const q = input.value.trim().toLowerCase();
+                            popup.querySelectorAll('tbody tr').forEach(tr => { tr.style.display = !q || tr.dataset.q.includes(q) ? '' : 'none'; });
+                        });
+                    }
+                });
+            };
 
             const run = async (params, okMsg) => {
                 try {
@@ -4838,6 +4868,7 @@ function __(key, def) {
                 </div>`;
 
             function draw() {
+                if (window.jQuery && $.fn.DataTable && $.fn.DataTable.isDataTable('#ipsec-activity')) $('#ipsec-activity').DataTable().destroy();
                 const st = state.settings;
                 const myIp = state.my_ip || '';
                 const myRule = (state.activity.find(a => a.ip === myIp) || {}).rule || (state.trusted.some(t => t.ip === myIp) ? 'trust' : '');
@@ -4900,11 +4931,12 @@ function __(key, def) {
 
                     <div class="sr-card as-section">
                         <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-earth"></i> ${__('ip_sec_activity_title', 'Sign-in activity by IP (last 7 days)')}</div></div>
-                        <div class="sr-table-wrap"><table class="sr-table table mb-0">
+                        <div class="sr-table-wrap"><table class="sr-table table mb-0" id="ipsec-activity">
                             <thead><tr><th>${__('ip_access_ip_col', 'IP address / range')}</th><th>${__('ip_sec_users', 'Users')}</th><th class="text-center">${__('ip_sec_ok', 'Signed in')}</th><th class="text-center">${__('ip_sec_failed', 'Failed')}</th><th>${__('ip_sec_last_seen', 'Last seen')}</th><th></th></tr></thead>
-                            <tbody>${state.activity.length ? state.activity.slice(0, showAllActivity ? undefined : ACTIVITY_ROWS).map(a => `<tr${a.rule === 'block' ? ' class="ipsec-row-blocked"' : ''}>
+                            <tbody>${state.activity.length ? state.activity.map(a => `<tr${a.rule === 'block' ? ' class="ipsec-row-blocked"' : ''}>
                                 <td class="sr-mono"><b>${escapeHtml(a.ip)}</b>${a.ip === myIp ? ` <span class="sr-pill tone-sky">${__('ip_sec_you', 'You')}</span>` : ''}</td>
-                                <td class="ipsec-users">${a.users.map(u => `<span title="${escapeHtml(u.id)}">${escapeHtml(u.name || u.id)}</span>`).join(', ')}${Number(a.ids) > a.users.length ? ` +${Number(a.ids) - a.users.length}` : ''}</td>
+                                <td class="ipsec-users" data-search="${escapeHtml(a.users.map(u => (u.name || '') + ' ' + u.id).join(' '))}">${a.users.slice(0, USERS_SHOWN).map(u => `<span title="${escapeHtml(u.id)}">${escapeHtml(u.name || u.id)}</span>`).join(', ')}${a.users.length > USERS_SHOWN
+                                    ? ` <button type="button" class="ipsec-users-more" data-ip="${escapeHtml(a.ip)}">+${a.users.length - USERS_SHOWN} ${__('ip_sec_more', 'more')}</button>` : ''}</td>
                                 <td class="text-center"><span class="sr-pill tone-${Number(a.ok) ? 'green' : 'slate'}">${a.ok}</span></td>
                                 <td class="text-center"><span class="sr-pill tone-${Number(a.failed) ? 'red' : 'slate'}">${a.failed}</span></td>
                                 <td class="sr-mono">${escapeHtml(a.last_seen)}</td>
@@ -4912,10 +4944,8 @@ function __(key, def) {
                                     : a.rule === 'trust' ? `<span class="sr-pill tone-green">${__('ip_sec_trusted', 'Trusted')}</span>`
                                     : `<button type="button" class="sr-btn sr-btn-sm ipsec-trust" data-ip="${escapeHtml(a.ip)}"><i class="mdi mdi-check"></i> ${__('ip_sec_trust', 'Trust')}</button>
                                        ${a.ip === myIp ? '' : `<button type="button" class="sr-btn sr-btn-sm sr-btn-danger ipsec-block" data-ip="${escapeHtml(a.ip)}"><i class="mdi mdi-close-circle"></i> ${__('ip_sec_block', 'Block')}</button>`}`}</td>
-                            </tr>`).join('') : `<tr><td colspan="6" class="text-muted text-center">${__('ip_sec_no_activity', 'No sign-in activity yet')}</td></tr>`}</tbody>
+                            </tr>`).join('') : ''}</tbody>
                         </table></div>
-                        ${state.activity.length > ACTIVITY_ROWS ? `<div class="as-section-foot"><button type="button" class="sr-btn sr-btn-sm" id="ipsec-more">
-                            <i class="mdi ${showAllActivity ? 'mdi-chevron-up' : 'mdi-chevron-down'}"></i> ${showAllActivity ? __('show_less', 'Show less') : __('show_all', 'Show all') + ' (' + state.activity.length + ')'}</button></div>` : ''}
                     </div>
 
                     <div class="sr-card as-section">
@@ -4947,10 +4977,28 @@ function __(key, def) {
                         </div>
                     </div>`;
 
-                const more = root.querySelector('#ipsec-more');
-                if (more) more.addEventListener('click', () => { showAllActivity = !showAllActivity; draw(); });
-                root.querySelectorAll('.ipsec-trust').forEach(b => b.addEventListener('click', () => trustIp(b.dataset.ip)));
-                root.querySelectorAll('.ipsec-block').forEach(b => b.addEventListener('click', () => blockIp(b.dataset.ip)));
+                // Sign-in activity: DataTable (search, sort, paging); Block / Trust buttons are bound by delegation
+                // below so they also work on rows of other pages
+                if (window.jQuery && $.fn.DataTable) {
+                    $('#ipsec-activity').DataTable({
+                        order: [[4, 'desc']],
+                        pageLength: 10,
+                        lengthMenu: [10, 25, 50, 100],
+                        autoWidth: false,
+                        columnDefs: [{ targets: [2, 3], className: 'text-center' }, { targets: 5, orderable: false, searchable: false, className: 'text-right' }],
+                        language: {
+                            search: '',
+                            searchPlaceholder: __('search', 'Search') + '...',
+                            lengthMenu: __('dt_show_entries', 'Show _MENU_'),
+                            info: __('dt_info', 'Showing _START_ to _END_ of _TOTAL_'),
+                            infoEmpty: __('dt_info_empty', 'No entries'),
+                            infoFiltered: __('dt_info_filtered', '(filtered from _MAX_)'),
+                            zeroRecords: __('dt_zero_records', 'No matching records'),
+                            emptyTable: __('ip_sec_no_activity', 'No sign-in activity yet'),
+                            paginate: { previous: '&lsaquo;', next: '&rsaquo;' }
+                        }
+                    });
+                }
                 root.querySelectorAll('.ipsec-del').forEach(b => b.addEventListener('click', () => removeRule(b.dataset.id, b.dataset.block === '1')));
                 root.querySelectorAll('.ipsec-add-btn').forEach(b => b.addEventListener('click', () => {
                     const rule = b.dataset.rule;
@@ -4979,6 +5027,15 @@ function __(key, def) {
                     run({ action: 'save_ip_access_mode', enabled: enabled ? '1' : '0', scope: root.querySelector('#ipsec-scope').value }, __('saved_successfully', 'Saved successfully.'));
                 });
             }
+
+            root.addEventListener('click', (e) => {
+                const more = e.target.closest('.ipsec-users-more');
+                if (more) { showIpUsers(more.dataset.ip); return; }
+                const trust = e.target.closest('.ipsec-trust');
+                const block = e.target.closest('.ipsec-block');
+                if (trust) trustIp(trust.dataset.ip);
+                else if (block) blockIp(block.dataset.ip);
+            });
 
             post({ action: 'get_ip_security' }).then(data => {
                 if (!data.success) throw new Error(data.message || __('error', 'Error'));

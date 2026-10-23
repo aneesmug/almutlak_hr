@@ -46,6 +46,7 @@
 
     <!-- Plugins -->
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <!-- App css -->
@@ -843,6 +844,23 @@
         .ipsec-add .ipsec-add-ip { flex: 0 1 220px; }
         .ipsec-add .ipsec-add-label { flex: 1 1 200px; }
         .ipsec-users { max-width: 340px; font-size: 12.5px; }
+        #ipsec-activity_wrapper > .row:first-child { padding: 12px 18px 4px; margin: 0; }
+        #ipsec-activity_wrapper > .row:last-child { padding: 4px 12px 10px; margin: 0; align-items: center; }
+        #ipsec-activity_wrapper .dataTables_filter input { border-radius: 8px; min-width: 220px; }
+        #ipsec-activity_wrapper .dataTables_length select { border-radius: 8px; }
+        #ipsec-activity_wrapper .dataTables_info { font-size: 12px; color: var(--sr-muted); }
+        #ipsec-activity_wrapper .pagination .page-link { border-radius: 8px !important; margin: 0 2px; font-size: 12px; min-width: 32px; text-align: center; }
+        #ipsec-activity_wrapper .pagination .page-item.active .page-link { background: var(--sr-accent); border-color: var(--sr-accent); color: #fff; }
+        table#ipsec-activity { width: 100% !important; }
+        .ipsec-users-more { border: 0; padding: 1px 8px; margin-inline-start: 4px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: var(--sr-accent); background: var(--sr-accent-soft, rgba(99, 102, 241, .12)); cursor: pointer; white-space: nowrap; }
+        .ipsec-users-more:hover { background: var(--sr-accent); color: #fff; }
+        .ipsec-pop-head { display: flex; align-items: center; gap: 12px; text-align: start; }
+        .ipsec-pop-head > i { width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; color: var(--sr-accent); background: var(--sr-accent-soft, rgba(99, 102, 241, .12)); }
+        .ipsec-pop-head b { display: block; font-size: 17px; }
+        .ipsec-pop-head small { display: block; font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+        .ipsec-pop .ipsec-pop-search { margin-bottom: 10px; border-radius: 8px; }
+        .ipsec-pop .ipsec-pop-list { max-height: 60vh; overflow: auto; text-align: start; border: 1px solid var(--sr-border); border-radius: 10px; }
+        .ipsec-pop .ipsec-pop-list thead th { position: sticky; top: 0; z-index: 1; background: var(--sr-surface-2, #f8fafc); }
         tr.ipsec-row-blocked td { background: var(--tone-red-bg, #fef2f2); }
         /* status line under a card's hint (e.g. Cloudflare: how this page was reached) - wraps, unlike a pill */
         .as-int-status { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; font-weight: 600; line-height: 1.45;
@@ -1217,6 +1235,9 @@
 
     <!-- Plugins -->
     <script src="./plugins/select2/js/select2.min.js"></script>
+    <!-- DataTables: IP Security > sign-in activity -->
+    <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
+    <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <!-- App js -->
