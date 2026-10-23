@@ -4713,7 +4713,7 @@ function __(key, def) {
                                 </div>
                             </div>
                             <p class="as-int-hint">${escapeHtml(it.on ? it.onHint : it.offHint)}</p>
-                            ${it.status ? `<span class="sr-pill tone-${it.status.tone}" style="align-self:flex-start"><i class="mdi ${it.status.icon}"></i> ${escapeHtml(it.status.text)}</span>` : ''}
+                            ${it.status ? `<div class="as-int-status tone-${it.status.tone}"><i class="mdi ${it.status.icon}"></i><span>${escapeHtml(it.status.text)}</span></div>` : ''}
                             <div class="as-int-foot">
                                 <div class="custom-control custom-switch">
                                     <input type="checkbox" class="custom-control-input integration-toggle" id="integration-${it.setting}" data-setting="${it.setting}" ${it.on ? 'checked' : ''}>

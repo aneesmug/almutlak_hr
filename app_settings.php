@@ -838,6 +838,12 @@
         .as-int-title b { font-size: 14px; color: var(--sr-text); }
         .as-int-hint { margin: 0; font-size: 12.5px; color: var(--sr-muted); line-height: 1.5; flex: 1; }
         .as-int-foot { padding-top: 10px; border-top: 1px solid var(--sr-border); }
+        /* status line under a card's hint (e.g. Cloudflare: how this page was reached) - wraps, unlike a pill */
+        .as-int-status { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; font-weight: 600; line-height: 1.45;
+            color: var(--tone-slate-fg, #475569); background: var(--tone-slate-bg, #f1f5f9); border: 1px solid var(--tone-slate-bd, #e2e8f0); }
+        .as-int-status i { font-size: 15px; line-height: 1.3; }
+        .as-int-status.tone-green { color: var(--tone-green-fg, #15803d); background: var(--tone-green-bg, #f0fdf4); border-color: var(--tone-green-bd, #bbf7d0); }
+        .as-int-status.tone-amber { color: var(--tone-amber-fg, #b45309); background: var(--tone-amber-bg, #fffbeb); border-color: var(--tone-amber-bd, #fde68a); }
         .as-ms-logo { display: grid; grid-template-columns: 13px 13px; gap: 2px; padding: 4px; flex: none; }
         .as-ms-logo i { width: 13px; height: 13px; display: block; }
         .as-ga-logo { width: 34px; height: 34px; border-radius: 10px; background: #fff; border: 1px solid var(--sr-border); display: inline-flex; align-items: center; justify-content: center; flex: none; }
