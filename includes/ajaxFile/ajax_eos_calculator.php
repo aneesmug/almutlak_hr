@@ -27,7 +27,6 @@ function makeCurlRequest($url, $method = 'POST', $payload = []) {
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curl_error = curl_error($ch);
-    curl_close($ch);
 
     if ($curl_error) {
         return ['error' => 'Curl error: ' . $curl_error, 'http_code' => 0, 'data' => null];

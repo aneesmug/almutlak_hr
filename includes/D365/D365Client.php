@@ -22,7 +22,7 @@ class D365Client
     private $token = null;
     private $tokenExpires = 0;
 
-    public function __construct(array $config = null)
+    public function __construct(?array $config = null)
     {
         if ($config === null) {
             $config = self::loadConfig();
@@ -97,7 +97,7 @@ class D365Client
     }
 
     /** Payroll journal name per legal entity, from "MHO=GRN_JRN, MSP=RY-GEN, ..." in D365 Config */
-    public static function journalNames(array $config = null)
+    public static function journalNames(?array $config = null)
     {
         $config = $config ?? self::loadConfig();
         $map = [];
@@ -441,7 +441,7 @@ class D365Client
         return ['status' => 200, 'data' => ['value' => $rows], 'error' => null];
     }
 
-    public function request($method, $entity, array $query = [], array $body = null)
+    public function request($method, $entity, array $query = [], ?array $body = null)
     {
         if ($method !== 'GET' && !$this->allowWrites) {
             return ['status' => 0, 'data' => null, 'error' => "Writes to D365 are disabled (ALLOW_WRITES is off for the {$this->environment} environment in d365_config.ini)"];
@@ -500,7 +500,6 @@ class D365Client
         $raw = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = $raw === false ? ('cURL error ' . curl_errno($ch) . ': ' . curl_error($ch)) : null;
-        curl_close($ch);
 
         $data = null;
         if (is_string($raw) && $raw !== '') {

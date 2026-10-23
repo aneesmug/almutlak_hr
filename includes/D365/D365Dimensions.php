@@ -124,7 +124,7 @@ class D365Dimensions
     }
 
     /** emp_id => [dimension => value]; $empIds null = everyone */
-    public static function getEmployeeValues(mysqli $db, array $empIds = null)
+    public static function getEmployeeValues(mysqli $db, ?array $empIds = null)
     {
         self::ensureTables($db);
         $out = [];

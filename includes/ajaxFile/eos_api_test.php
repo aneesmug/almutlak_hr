@@ -49,7 +49,6 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 $response = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curl_error = curl_error($ch);
-curl_close($ch);
 
 $result['tests'][] = [
     'name' => 'cURL POST with query params',
@@ -74,7 +73,6 @@ curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 $response2 = curl_exec($ch);
 $http_code2 = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curl_error2 = curl_error($ch);
-curl_close($ch);
 
 $result['tests'][] = [
     'name' => 'cURL GET with query params',
@@ -137,7 +135,6 @@ curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 $response4 = curl_exec($ch);
 $http_code4 = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curl_error4 = curl_error($ch);
-curl_close($ch);
 
 $result['tests'][] = [
     'name' => 'cURL POST - Reason codes endpoint',

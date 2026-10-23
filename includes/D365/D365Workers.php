@@ -205,7 +205,7 @@ class D365Workers
      * already have in D365 (cached 24h). '' when unknown.
      * $employments = D365Payroll::getEmployments() map, to avoid fetching it again.
      */
-    public function departmentFor($empId, array $employments = null)
+    public function departmentFor($empId, ?array $employments = null)
     {
         if ($this->departmentMap === null) {
             $this->departmentMap = $this->buildDepartmentMap($employments);
@@ -224,7 +224,7 @@ class D365Workers
             ?? '';
     }
 
-    private function buildDepartmentMap(array $employments = null)
+    private function buildDepartmentMap(?array $employments = null)
     {
         $map = [];
         $config = D365Client::loadConfig();

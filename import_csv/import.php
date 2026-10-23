@@ -1,7 +1,7 @@
 <?php
 if(!empty($_FILES['file']['name'])){
 $connect = new PDO("mysql:host=localhost;dbname=mochachino_db;", "mochachino_user", "hain6539306", array(
-       PDO::MYSQL_ATTR_LOCAL_INFILE => true,
+       (PHP_VERSION_ID >= 80400 ? \Pdo\Mysql::ATTR_LOCAL_INFILE : PDO::MYSQL_ATTR_LOCAL_INFILE) => true,
 ));
 
 $total_row = count(file($_FILES['file']['tmp_name']));

@@ -197,7 +197,6 @@ if (!function_exists('msauth_settings')) {
         $body = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
         return [$status, $body === false ? null : json_decode($body, true), $error];
     }
 

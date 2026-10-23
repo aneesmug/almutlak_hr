@@ -21,7 +21,6 @@
         $image = imagecreatefromjpeg($tmpFilePath);        
         $uploadFilePath = $uploadDir.$newfilename;
         imagejpeg($image, $uploadFilePath, 80);
-        imagedestroy($image);
     } else {
         $newfilename = $image_up;
     }

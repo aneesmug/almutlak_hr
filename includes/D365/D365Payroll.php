@@ -62,7 +62,7 @@ class D365Payroll
     private $db;
     private $client;
 
-    public function __construct(mysqli $db, D365Client $client = null)
+    public function __construct(mysqli $db, ?D365Client $client = null)
     {
         $this->db = $db;
         $this->client = $client;
@@ -465,7 +465,7 @@ class D365Payroll
     }
 
     /** payroll rows for a month, keyed by emp_id, with itemized benefits/deductions */
-    public function getPayrolls($month, array $empIds = null)
+    public function getPayrolls($month, ?array $empIds = null)
     {
         $sql = "SELECT p.*, e.name FROM payrolls p LEFT JOIN employees e ON e.emp_id = p.emp_id WHERE p.month_year = ?";
         $types = 's';
@@ -717,7 +717,7 @@ class D365Payroll
      * account structure has main account + 5 ("51040302--81--JD-"): segments 2-6 of the employment value
      * line up with the ledger dimensions (verified against existing journal lines, e.g. 11014102---5430--).
      */
-    public static function ledgerAccount($mainAccount, $dims, array $settings, array $extra = [], array $allowed = null)
+    public static function ledgerAccount($mainAccount, $dims, array $settings, array $extra = [], ?array $allowed = null)
     {
         if (($settings['dimension_mode'] ?? 'employment') !== 'employment' || trim($dims, '-') === '') {
             return $mainAccount;
@@ -767,7 +767,7 @@ class D365Payroll
      * segments follow the active ledger dimension format, dimensions outside the template stay blank,
      * and dimensions the company's account structure does not accept for this main account are dropped.
      */
-    public static function templateAccount($mainAccount, array $values, array $allowed = null)
+    public static function templateAccount($mainAccount, array $values, ?array $allowed = null)
     {
         $byName = array_change_key_case($values, CASE_LOWER);
         $out = [];
@@ -905,7 +905,7 @@ class D365Payroll
     private $workersHelper = null;
 
     /** Employment dims with a blank Department filled from the app department (see D365Workers::departmentFor) */
-    private function dimsWithDepartment($empId, $dims, array $employments = null)
+    private function dimsWithDepartment($empId, $dims, ?array $employments = null)
     {
         if (!$this->client || trim((string)$dims, '-') === '') {
             return $dims;

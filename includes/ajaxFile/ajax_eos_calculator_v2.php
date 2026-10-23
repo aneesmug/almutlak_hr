@@ -132,7 +132,6 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 $apiResponse = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlError = curl_error($ch);
-curl_close($ch);
 
 log_debug("Qiwa API response code: $httpCode, error: " . ($curlError ?: 'none'));
 log_debug("Qiwa API response preview: " . substr($apiResponse, 0, 300));

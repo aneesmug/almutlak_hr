@@ -47,7 +47,7 @@ $userId = (string)($empid ?? ($_SESSION['user_id'] ?? ''));
 $action = (string)($_POST['action'] ?? '');
 
 /** Active employees with stored + effective payroll company (effective = stored, else D365 employment company) */
-function d365dim_employees(mysqli $db, $environment, array $employments = null)
+function d365dim_employees(mysqli $db, $environment, ?array $employments = null)
 {
     cost_center_ensure_column($db);
     // app_company / app_company_name = the company assigned in the HR app (employees.comp_no), not D365

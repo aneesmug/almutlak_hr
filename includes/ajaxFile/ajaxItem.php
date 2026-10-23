@@ -24,7 +24,6 @@ if ($ajaxType == 'add_item') {
         $image = imagecreatefromjpeg($tmpFilePath);        
         $uploadFilePath = $uploadDir.$newfilename;
         imagejpeg($image, $uploadFilePath, 80);
-        imagedestroy($image);
     }
 
     $sql="INSERT INTO `menu_item`(`category_id`, `price_level`, `name_eng`, `name_ar`, `big_price`, `small_price`, `big_cal`, `small_cal`, `created_at`) VALUES ('$category_id_up','$price_level_up','$name_eng_up','$name_ar_up','$big_price_up','$small_price_up','$big_cal_up','$small_cal_up', '".date('Y-m-d H:i:s')."')";
@@ -94,7 +93,6 @@ if ($ajaxType == 'add_item') {
         $image = imagecreatefromjpeg($tmpFilePath);        
         $uploadFilePath = $uploadDir.$newfilename;
         imagejpeg($image, $uploadFilePath, 80);
-        imagedestroy($image);
     } else {
         $newfilename = $image_up;
     }

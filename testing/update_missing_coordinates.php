@@ -104,7 +104,6 @@ function getLocationFromIP($ip) {
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
         $response = curl_exec($ch);
-        curl_close($ch);
         
         if ($response) {
             $data = json_decode($response, true);

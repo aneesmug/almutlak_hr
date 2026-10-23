@@ -112,7 +112,6 @@ while ($retryCount < $maxRetries && !$validJsonReceived) {
     $apiResponse = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlError = curl_error($ch);
-    curl_close($ch);
 
     // Check if response is HTML (might be WAF block or redirect)
     if (!empty($apiResponse) && (strpos($apiResponse, '<!DOCTYPE') !== false || strpos($apiResponse, '<html') !== false)) {

@@ -443,7 +443,6 @@ final class FileUploader
             return '';
         }
         $mime = (string)@finfo_file($fi, $path);
-        finfo_close($fi);
         return $mime;
     }
 

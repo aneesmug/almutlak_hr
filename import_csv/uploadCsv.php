@@ -29,9 +29,9 @@ try {
         "mochachino_user",
         "hain6539306",
         array(
-            PDO::MYSQL_ATTR_LOCAL_INFILE => true,
+            (PHP_VERSION_ID >= 80400 ? \Pdo\Mysql::ATTR_LOCAL_INFILE : PDO::MYSQL_ATTR_LOCAL_INFILE) => true,
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION/*,
-            PDO::MYSQL_ATTR_MAX_BUFFER_SIZE => 1024*1024*50,
+            (PHP_VERSION_ID >= 80400 ? \Pdo\Mysql::ATTR_MAX_BUFFER_SIZE : PDO::MYSQL_ATTR_MAX_BUFFER_SIZE) => 1024*1024*50,
             PDO::ATTR_TIMEOUT => 1440,
             PDO::ATTR_EMULATE_PREPARES => false*/
         )

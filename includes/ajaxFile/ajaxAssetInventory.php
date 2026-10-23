@@ -142,7 +142,6 @@ function embedSignatureOnProofFile($proofFilePath, $signatureImagePath, $outputP
         $signatureImage = @imagecreatefrompng($signatureImagePath);
         if (!$signatureImage) {
             error_log('Failed to load signature image: ' . $signatureImagePath);
-            imagedestroy($proofImage);
             return false;
         }
         
@@ -170,7 +169,6 @@ function embedSignatureOnProofFile($proofFilePath, $signatureImagePath, $outputP
             imagesavealpha($resizedSig, true);
             
             imagecopyresampled($resizedSig, $signatureImage, 0, 0, 0, 0, $newWidth, $newHeight, $sigWidth, $sigHeight);
-            imagedestroy($signatureImage);
             $signatureImage = $resizedSig;
             
             $sigWidth = $newWidth;
@@ -201,8 +199,6 @@ function embedSignatureOnProofFile($proofFilePath, $signatureImagePath, $outputP
                 break;
         }
         
-        imagedestroy($proofImage);
-        imagedestroy($signatureImage);
         
         return $success;
     } catch (Throwable $e) {

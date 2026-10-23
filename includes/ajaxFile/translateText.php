@@ -41,7 +41,6 @@ function translate_http_get(string $url, ?int &$httpCode = null): ?string {
     $response = curl_exec($ch);
     $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlError = curl_error($ch);
-    curl_close($ch);
 
     if ($httpCode !== 200 || !$response) {
         error_log('Translation request failed (' . parse_url($url, PHP_URL_HOST) . '): HTTP ' . $httpCode . ' ' . $curlError);

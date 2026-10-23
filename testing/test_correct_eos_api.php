@@ -28,7 +28,6 @@ function testAPI($url, $method = 'POST', $params = []) {
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
-    curl_close($ch);
     
     return [
         'http_code' => $http_code,
