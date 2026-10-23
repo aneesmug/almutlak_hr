@@ -363,17 +363,10 @@ class ActivityLogger {
      * @return string
      */
     private static function getIpAddress() {
-        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-            $ip = $_SERVER['HTTP_CLIENT_IP'];
-        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
-        } else {
-            $ip = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
-        }
-        
-        // Return only the first IP if multiple are present (proxy chain)
-        $ip_parts = explode(',', $ip);
-        return trim($ip_parts[0]);
+        // REMOTE_ADDR only: Client-IP / X-Forwarded-For can be set by anyone.
+        // Behind Cloudflare it already holds the real visitor IP (includes/cloudflare_ip.php).
+        require_once __DIR__ . '/cloudflare_ip.php';
+        return $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
     }
 }
 } // End of if (!class_exists('ActivityLogger'))

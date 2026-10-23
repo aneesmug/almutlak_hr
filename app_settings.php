@@ -1078,6 +1078,9 @@
             'gauthEnabled' => gauth_enabled($conDB),
             // Email OTP as a backup for Microsoft / Google 2FA users (Integrations tab)
             'emailOtpFallback' => email_otp_fallback_enabled($conDB),
+            // Cloudflare switch (Integrations tab) + whether this page was opened through Cloudflare
+            'cloudflareEnabled' => cloudflare_proxy_enabled(),
+            'cloudflareDetected' => cloudflare_request_detected(),
             'canAccessDepartmentsTab' => (bool) $canAccessDepartmentsTab,
             'canAccessJobTitlesTab' => (bool) $canAccessJobTitlesTab,
             'canAccessLocationsTab' => (bool) $canAccessLocationsTab,

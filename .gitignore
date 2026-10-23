@@ -14,3 +14,6 @@
 
 # Google Authenticator secret encryption key (generated on first use) - back up, never commit
 /includes/GoogleAuth/gauth_secret_key.php
+
+# Cloudflare switch flag (App Settings > Integrations) - per server, never deploy
+/cache/cloudflare_proxy.on

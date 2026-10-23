@@ -74,6 +74,8 @@ function __(key, def) {
         const GAUTH_ON = (window.APP_SETTINGS_PERMISSIONS || {}).gauthEnabled === true;
         // Email OTP backup for 2FA users (Integrations tab) - on unless switched off
         const EMAIL_OTP_FALLBACK_ON = (window.APP_SETTINGS_PERMISSIONS || {}).emailOtpFallback !== false;
+        const CLOUDFLARE_ON = (window.APP_SETTINGS_PERMISSIONS || {}).cloudflareEnabled === true;
+        const CLOUDFLARE_DETECTED = (window.APP_SETTINGS_PERMISSIONS || {}).cloudflareDetected === true;
         const ATTENDANCE_KEYS = ['manage_device_monitor', 'manage_attendance', 'add_manual_attendance', 'edit_attendance_record', 'delete_attendance_record', 'manage_attendance_config', 'view_employee_attendance_tab', 'attendance'];
         // Keys / report types of a switched-off integration: hidden in the UI, kept when saving
         const isHiddenFeatureKey = key => (!D365_ON && isD365Key(key)) || (!ATTENDANCE_ON && ATTENDANCE_KEYS.includes(String(key || '')));
@@ -4639,6 +4641,19 @@ function __(key, def) {
                     confirmOff: __('attendance_disable_confirm_text', 'Attendance pages, menu links, the employee Attendance tab, the attendance report and Attendance Config are hidden for everyone. Devices stop being accepted (they keep their punches), and payroll skips automatic attendance deductions / overtime. Settings and permissions are kept.'),
                 },
                 {
+                    tab: 'addons', setting: 'cloudflare_enabled', on: CLOUDFLARE_ON,
+                    icon: '<span class="ac-ico as-int-ico" style="color:#f38020;background:rgba(243,128,32,.12)"><i class="mdi mdi-cloud"></i></span>',
+                    name: 'Cloudflare',
+                    label: __('cloudflare_enable_label', 'Site is behind Cloudflare'),
+                    onHint: __('cloudflare_enabled_hint', 'On - for requests that come through Cloudflare, the app uses the real visitor IP Cloudflare sends (login lockouts, request limits, ZK sync allowed IP, activity logs). Requests from other addresses keep their own IP, so it cannot be faked.'),
+                    offHint: __('cloudflare_disabled_hint', 'Off - the app uses the connecting IP as is. Turn on once the domain is proxied through Cloudflare (orange cloud), otherwise every user shares a few Cloudflare IPs.'),
+                    confirmOn: __('cloudflare_enable_confirm_text', 'The app will use the real visitor IP that Cloudflare sends for requests coming from Cloudflare.'),
+                    confirmOff: __('cloudflare_disable_confirm_text', 'If the site is still behind Cloudflare, all users will share a few Cloudflare IPs: request limits and login lockouts then hit everyone together.'),
+                    status: CLOUDFLARE_DETECTED
+                        ? { tone: 'green', icon: 'mdi-check-circle', text: __('cloudflare_detected', 'This page was opened through Cloudflare') }
+                        : { tone: 'slate', icon: 'mdi-information-outline', text: __('cloudflare_not_detected', 'This page was not opened through Cloudflare') },
+                },
+                {
                     tab: '2fa', setting: 'msauth_enabled', on: MSAUTH_ON, icon: msLogo,
                     name: __('msauth_name', 'Microsoft Sign-in (2FA)'),
                     label: __('msauth_enable_label', 'Enable Microsoft Sign-in'),
@@ -4686,6 +4701,7 @@ function __(key, def) {
                                 </div>
                             </div>
                             <p class="as-int-hint">${escapeHtml(it.on ? it.onHint : it.offHint)}</p>
+                            ${it.status ? `<span class="sr-pill tone-${it.status.tone}" style="align-self:flex-start"><i class="mdi ${it.status.icon}"></i> ${escapeHtml(it.status.text)}</span>` : ''}
                             <div class="as-int-foot">
                                 <div class="custom-control custom-switch">
                                     <input type="checkbox" class="custom-control-input integration-toggle" id="integration-${it.setting}" data-setting="${it.setting}" ${it.on ? 'checked' : ''}>

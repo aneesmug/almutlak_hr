@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/cloudflare_ip.php'; // real device / sync-agent IP behind Cloudflare
 // Minimal DB bootstrap for ZKTeco device endpoints (iclock/*.php) and related
 // CLI scripts. Deliberately does NOT include includes/db.php: that file's
 // per-IP/global connection-slot limiter, license_enforce() redirect, and

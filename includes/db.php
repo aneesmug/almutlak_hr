@@ -10,6 +10,8 @@
  * - Added error handling in case the configuration file is unreadable.
  */
 
+require_once __DIR__ . '/cloudflare_ip.php'; // real visitor IP behind Cloudflare (before the per-IP limits below)
+
 ob_start();
 
 if (!function_exists('app_is_json_request')) {

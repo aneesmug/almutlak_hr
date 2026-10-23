@@ -177,6 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 function get_all_settings($conDB) {
     ensure_attendance_retention_setting($conDB);
     ensure_attendance_enabled_setting($conDB);
+    ensure_cloudflare_setting($conDB);
     ensure_report_visibility_setting($conDB);
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
@@ -203,7 +204,7 @@ function get_all_settings($conDB) {
     // memo_templates_version is an internal counter the memo page maintains itself
     // (see memo_helper.php) - showing it made a "Memo Internal" tab with a field
     // nobody should type into.
-    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled', 'msauth_enabled', 'msauth_scope', 'gauth_enabled', 'gauth_scope', 'email_otp_fallback') ORDER BY setting_group, id";
+    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled', 'msauth_enabled', 'msauth_scope', 'gauth_enabled', 'gauth_scope', 'email_otp_fallback', 'cloudflare_enabled') ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 
     if ($result) {
@@ -232,6 +233,7 @@ function get_all_settings($conDB) {
 function update_all_settings($conDB) {
     ensure_attendance_retention_setting($conDB);
     ensure_attendance_enabled_setting($conDB);
+    ensure_cloudflare_setting($conDB);
     ensure_report_visibility_setting($conDB);
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
@@ -290,7 +292,7 @@ function update_all_settings($conDB) {
         $text_inputs = array_diff_key($_POST, ['action' => '']);
         global $is_system_admin;
         foreach ($text_inputs as $setting_name => $value) {
-            if ((strpos((string)$setting_name, 'd365_') === 0 || strpos((string)$setting_name, 'msauth_') === 0 || strpos((string)$setting_name, 'gauth_') === 0 || $setting_name === 'attendance_enabled' || $setting_name === 'email_otp_fallback') && !($is_system_admin ?? false)) {
+            if ((strpos((string)$setting_name, 'd365_') === 0 || strpos((string)$setting_name, 'msauth_') === 0 || strpos((string)$setting_name, 'gauth_') === 0 || $setting_name === 'attendance_enabled' || $setting_name === 'email_otp_fallback' || $setting_name === 'cloudflare_enabled') && !($is_system_admin ?? false)) {
                 continue; // D365 Config, Microsoft Sign In and the Integrations switches are system-admin only (see get_all_settings)
             }
             if ($setting_name === 'msauth_client_secret' && trim((string)$value) === '') {
@@ -304,6 +306,13 @@ function update_all_settings($conDB) {
 
         $stmt->close();
         $conDB->commit();
+
+        // Cloudflare switch is read from a flag file before the DB connects (includes/cloudflare_ip.php)
+        if (isset($text_inputs['cloudflare_enabled']) && ($is_system_admin ?? false)
+            && !cloudflare_set_proxy_enabled((string) $text_inputs['cloudflare_enabled'] === '1')) {
+            echo json_encode(['success' => false, 'message' => 'Saved, but the folder "cache" is not writable - the Cloudflare switch cannot take effect until it is.']);
+            return;
+        }
 
         // If an auto sign-out threshold just changed, apply it right now instead
         // of waiting for some other request to incidentally trigger the sweep -
@@ -428,6 +437,23 @@ function ensure_attendance_enabled_setting($conDB) {
     $conDB->query("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options)
         SELECT 'attendance_enabled', '1', 'integrations', 'Enable Attendance (biometric devices, attendance records, timetables)', 'select', '{\"1\":\"Enabled\",\"0\":\"Disabled\"}'
         FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_name = 'attendance_enabled')");
+}
+
+/**
+ * Cloudflare switch (App Settings > Integrations > "Cloudflare"): trust the CF-Connecting-IP header from
+ * Cloudflare ranges as the visitor IP. Created once as OFF. The row is mirrored to the flag file that
+ * includes/cloudflare_ip.php reads before the DB connects; re-synced here so a deploy that drops the
+ * cache folder (or a row edited by hand) is fixed the next time App Settings is opened.
+ */
+function ensure_cloudflare_setting($conDB) {
+    $conDB->query("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options)
+        SELECT 'cloudflare_enabled', '0', 'integrations', 'Site behind Cloudflare: use the real visitor IP from Cloudflare', 'select', '{\"1\":\"Enabled\",\"0\":\"Disabled\"}'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_name = 'cloudflare_enabled')");
+    $res = $conDB->query("SELECT setting_value FROM app_settings WHERE setting_name = 'cloudflare_enabled' LIMIT 1");
+    $on = ($res && ($row = $res->fetch_assoc())) && trim((string) $row['setting_value']) === '1';
+    if ($on !== cloudflare_proxy_enabled()) {
+        cloudflare_set_proxy_enabled($on);
+    }
 }
 
 /**

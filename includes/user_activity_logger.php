@@ -5,30 +5,14 @@
  */
 
 /**
- * Get client IP address (handles proxy and forwarding)
+ * Get client IP address (real visitor IP, also behind Cloudflare)
  */
 function getUserIP() {
-    $ipaddress = '';
-    if (isset($_SERVER['HTTP_CLIENT_IP']))
-        $ipaddress = $_SERVER['HTTP_CLIENT_IP'];
-    else if(isset($_SERVER['HTTP_X_FORWARDED_FOR']))
-        $ipaddress = $_SERVER['HTTP_X_FORWARDED_FOR'];
-    else if(isset($_SERVER['HTTP_X_FORWARDED']))
-        $ipaddress = $_SERVER['HTTP_X_FORWARDED'];
-    else if(isset($_SERVER['HTTP_FORWARDED_FOR']))
-        $ipaddress = $_SERVER['HTTP_FORWARDED_FOR'];
-    else if(isset($_SERVER['HTTP_FORWARDED']))
-        $ipaddress = $_SERVER['HTTP_FORWARDED'];
-    else if(isset($_SERVER['REMOTE_ADDR']))
-        $ipaddress = $_SERVER['REMOTE_ADDR'];
-    else
-        $ipaddress = 'UNKNOWN';
-    
-    // Handle multiple IPs (take the first one)
-    if (strpos($ipaddress, ',') !== false) {
-        $ipaddress = explode(',', $ipaddress)[0];
-    }
-    
+    // REMOTE_ADDR only: Client-IP / X-Forwarded-For can be set by anyone.
+    // Behind Cloudflare it already holds the real visitor IP (includes/cloudflare_ip.php).
+    require_once __DIR__ . '/cloudflare_ip.php';
+    $ipaddress = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
+
     return trim($ipaddress);
 }
 
