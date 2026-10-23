@@ -57,6 +57,10 @@ if (!function_exists('login_sec_client_ip')) {
         }
         if (!$success) {
             error_log('[LOGIN] Failed ' . $kind . ' for ID=' . $identifier . ' from ' . $ip);
+            // IP Security auto-block (App Settings > Integrations > IP Security)
+            if (function_exists('ip_guard_after_failure')) {
+                ip_guard_after_failure($conDB, $ip);
+            }
         }
     }
 

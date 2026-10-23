@@ -11,6 +11,8 @@
  */
 
 require_once __DIR__ . '/cloudflare_ip.php'; // real visitor IP behind Cloudflare (before the per-IP limits below)
+require_once __DIR__ . '/ip_access.php';     // IP Security: blocked IPs get a 403 here, before anything else
+ip_guard_enforce();
 
 ob_start();
 

@@ -17,3 +17,4 @@
 
 # Cloudflare switch flag (App Settings > Integrations) - per server, never deploy
 /cache/cloudflare_proxy.on
+/cache/ip_blocklist.json

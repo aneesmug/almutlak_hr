@@ -144,24 +144,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['success' => $gaOk, 'message' => $gaMessage]);
             }
             break;
-        case 'get_ip_access':
-        case 'save_ip_access':
-            // App access by IP (Integrations > Allowed IPs): system admins only
+        case 'get_ip_security':
+        case 'ip_rule_add':
+        case 'ip_rule_delete':
+        case 'save_ip_autoblock':
+        case 'save_ip_access_mode':
+            // IP Security (Integrations tab): system admins only
             if (!($is_system_admin ?? false)) {
                 http_response_code(403);
                 echo json_encode(['success' => false, 'message' => 'Access denied.']);
                 break;
             }
-            if ($action === 'save_ip_access') {
-                $ipList = json_decode((string) ($_POST['list'] ?? '[]'), true);
-                [$ipOk, $ipMessage] = ip_access_save($conDB, ($_POST['enabled'] ?? '') === '1', (string) ($_POST['scope'] ?? ''),
-                    is_array($ipList) ? $ipList : [], (string) ($actual_user_type ?? $user_type ?? ''));
-                if (!$ipOk) {
-                    echo json_encode(['success' => false, 'message' => $ipMessage]);
-                    break;
-                }
+            $ipOk = true;
+            $ipMessage = '';
+            if ($action === 'ip_rule_add') {
+                [$ipOk, $ipMessage] = ip_rule_save($conDB, (string) ($_POST['ip'] ?? ''), (string) ($_POST['rule'] ?? ''),
+                    (string) ($_POST['label'] ?? ''), 'manual', (string) ($_SESSION['auth_user']['user_id'] ?? ''));
+            } elseif ($action === 'ip_rule_delete') {
+                ip_rule_delete($conDB, (int) ($_POST['id'] ?? 0));
+            } elseif ($action === 'save_ip_autoblock') {
+                ip_access_update_settings($conDB, [
+                    'ip_autoblock_enabled' => ($_POST['enabled'] ?? '') === '1' ? '1' : '0',
+                    'ip_autoblock_fails'   => max(3, min(100, (int) ($_POST['fails'] ?? 10))),
+                    'ip_autoblock_ids'     => max(2, min(50, (int) ($_POST['ids'] ?? 5))),
+                ]);
+            } elseif ($action === 'save_ip_access_mode') {
+                [$ipOk, $ipMessage] = ip_access_save_mode($conDB, ($_POST['enabled'] ?? '') === '1', (string) ($_POST['scope'] ?? ''),
+                    (string) ($actual_user_type ?? $user_type ?? ''));
             }
-            echo json_encode(['success' => true, 'message' => $ipMessage ?? '', 'settings' => ip_access_settings($conDB, true), 'my_ip' => (string) ($_SERVER['REMOTE_ADDR'] ?? '')]);
+            if (!$ipOk) {
+                echo json_encode(['success' => false, 'message' => $ipMessage]);
+                break;
+            }
+            echo json_encode(['success' => true] + ip_security_state($conDB));
             break;
         case 'test_msauth':
             // Microsoft Sign-in config is system-admin only (it holds the client secret)

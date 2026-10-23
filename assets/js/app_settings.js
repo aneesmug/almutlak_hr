@@ -4696,7 +4696,7 @@ function __(key, def) {
             const intTabs = [
                 { key: 'addons', icon: 'mdi-puzzle', label: __('integrations_addons', 'Add-ons') },
                 { key: '2fa', icon: 'mdi-security', label: __('integrations_2fa', '2FA') },
-                { key: 'ipaccess', icon: 'mdi-lan', label: __('ip_access_tab', 'Allowed IPs') },
+                { key: 'ipaccess', icon: 'mdi-lan', label: __('ip_sec_tab', 'IP Security') },
             ];
             let intTab = 'addons';
             try {
@@ -4770,8 +4770,9 @@ function __(key, def) {
             }));
         }
 
-        // --- Integrations > Allowed IPs: app access only from listed IPs / ranges (includes/ip_access.php) ---
-        // Saved with its own action (validated; refuses a list that would lock out the admin saving it).
+        // --- Integrations > IP Security (includes/ip_access.php) ---
+        // Auto-block of IPs with repeated failed sign-ins, blocked / trusted IP lists, sign-in activity per IP
+        // with Block / Trust buttons, and the optional "office only" mode (only trusted IPs may sign in).
         function renderIpAccessPane(root) {
             if (!root) return;
             const post = (params) => fetch('./includes/settings_handler.php', {
@@ -4779,150 +4780,209 @@ function __(key, def) {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams(params)
             }).then(r => r.json());
-            let state = null; // { settings: {enabled, scope, list, blocked}, my_ip }
-            let rows = [];
+            let state = null; // { settings, blocked, trusted, activity, my_ip }
+            let showAllActivity = false;
+            const ACTIVITY_ROWS = 15;
 
-            const ipInList = (ip) => rows.some(r => (r.ip || '').trim() === ip);
-            const rowHtml = (r, i) => `
-                <tr data-idx="${i}">
-                    <td><input type="text" class="form-control form-control-sm sr-mono ipacc-ip" value="${escapeHtml(r.ip || '')}" placeholder="5.41.90.162 / 5.41.90.0/24"></td>
-                    <td><input type="text" class="form-control form-control-sm ipacc-label" value="${escapeHtml(r.label || '')}" maxlength="80" placeholder="${escapeHtml(__('ip_access_label_ph', 'e.g. Head office'))}"></td>
-                    <td class="text-right"><button type="button" class="sr-btn sr-btn-sm sr-btn-ghost ipacc-del" title="${escapeHtml(__('delete', 'Delete'))}"><i class="mdi mdi-delete"></i></button></td>
-                </tr>`;
+            const run = async (params, okMsg) => {
+                try {
+                    const data = await post(params);
+                    if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                    state = data;
+                    draw();
+                    if (okMsg) Swal.fire({ icon: 'success', title: okMsg, timer: 1300, showConfirmButton: false });
+                } catch (e) {
+                    Swal.fire(__('error', 'Error'), e.message, 'error');
+                }
+            };
+            const askLabel = async (title, text, ip) => {
+                const r = await Swal.fire({
+                    title, text, input: 'text', inputValue: '', inputPlaceholder: __('ip_sec_note_ph', 'Note (optional), e.g. Head office'),
+                    showCancelButton: true, allowOutsideClick: false,
+                    confirmButtonText: __('confirm', 'Confirm'), cancelButtonText: __('cancel', 'Cancel')
+                });
+                return r.isConfirmed ? (r.value || '') : null;
+            };
+            const blockIp = async (ip) => {
+                const note = await askLabel(__('ip_sec_block_q', 'Block this IP?'), ip + ' - ' + __('ip_sec_block_text', 'Every page, the login page included, is refused from this address.'), ip);
+                if (note !== null) run({ action: 'ip_rule_add', rule: 'block', ip, label: note }, __('ip_sec_blocked_done', 'IP blocked'));
+            };
+            const trustIp = async (ip) => {
+                const note = await askLabel(__('ip_sec_trust_q', 'Trust this IP?'), ip + ' - ' + __('ip_sec_trust_text', 'A trusted IP is never blocked automatically (use it for office / branch networks).'), ip);
+                if (note !== null) run({ action: 'ip_rule_add', rule: 'trust', ip, label: note }, __('ip_sec_trusted_done', 'IP trusted'));
+            };
+            const removeRule = async (id, isBlock) => {
+                const r = await Swal.fire({
+                    icon: 'question', showCancelButton: true,
+                    title: isBlock ? __('ip_sec_unblock_q', 'Unblock this IP?') : __('ip_sec_untrust_q', 'Remove from trusted IPs?'),
+                    confirmButtonText: isBlock ? __('ip_sec_unblock', 'Unblock') : __('remove', 'Remove'), cancelButtonText: __('cancel', 'Cancel')
+                });
+                if (r.isConfirmed) run({ action: 'ip_rule_delete', id }, isBlock ? __('ip_sec_unblocked_done', 'IP unblocked') : '');
+            };
 
-            function readRows() {
-                rows = Array.from(root.querySelectorAll('#ipacc-body tr[data-idx]')).map(tr => ({
-                    ip: tr.querySelector('.ipacc-ip').value.trim(),
-                    label: tr.querySelector('.ipacc-label').value.trim()
-                }));
-            }
+            const ruleRows = (list, isBlock) => list.length ? list.map(r => `<tr>
+                    <td class="sr-mono"><b>${escapeHtml(r.ip)}</b></td>
+                    <td>${r.source === 'auto' ? `<span class="sr-pill tone-red">${__('ip_sec_auto', 'Auto')}</span> ` : ''}${escapeHtml(r.label || '-')}</td>
+                    <td class="sr-mono">${escapeHtml(r.created_at)}</td>
+                    <td class="text-right" style="white-space:nowrap">
+                        ${isBlock ? `<button type="button" class="sr-btn sr-btn-sm ipsec-trust" data-ip="${escapeHtml(r.ip)}"><i class="mdi mdi-check"></i> ${__('ip_sec_trust', 'Trust')}</button>` : ''}
+                        <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost ipsec-del" data-id="${r.id}" data-block="${isBlock ? 1 : 0}"><i class="mdi ${isBlock ? 'mdi-lock-open' : 'mdi-delete'}"></i> ${isBlock ? __('ip_sec_unblock', 'Unblock') : __('remove', 'Remove')}</button>
+                    </td>
+                </tr>`).join('') : `<tr><td colspan="4" class="text-muted text-center">${isBlock ? __('ip_sec_no_blocked', 'No blocked IPs') : __('ip_sec_no_trusted', 'No trusted IPs yet')}</td></tr>`;
 
-            function draw(keep) {
-                // keep: unsaved switch / scope values while rows are added or removed
+            const addForm = (rule) => `
+                <div class="ipsec-add">
+                    <input type="text" class="form-control form-control-sm sr-mono ipsec-add-ip" data-rule="${rule}" placeholder="5.41.90.162 / 5.41.90.0/24">
+                    <input type="text" class="form-control form-control-sm ipsec-add-label" data-rule="${rule}" maxlength="255" placeholder="${escapeHtml(__('ip_sec_note_ph', 'Note (optional), e.g. Head office'))}">
+                    <button type="button" class="sr-btn sr-btn-sm ${rule === 'block' ? 'sr-btn-danger' : 'sr-btn-primary'} ipsec-add-btn" data-rule="${rule}"><i class="mdi ${rule === 'block' ? 'mdi-close-circle' : 'mdi-plus'}"></i> ${rule === 'block' ? __('ip_sec_block', 'Block') : __('ip_sec_trust', 'Trust')}</button>
+                </div>`;
+
+            function draw() {
                 const st = state.settings;
-                const enabledNow = keep ? keep.enabled : st.enabled;
-                const scopeNow = keep ? keep.scope : st.scope;
                 const myIp = state.my_ip || '';
-                const blocked = st.blocked || [];
+                const myRule = (state.activity.find(a => a.ip === myIp) || {}).rule || (state.trusted.some(t => t.ip === myIp) ? 'trust' : '');
                 root.innerHTML = `
                     <div class="sr-card as-section">
                         <div class="sr-card-head">
-                            <div class="sr-card-title"><i class="mdi mdi-lan"></i> ${__('ip_access_title', 'Allowed IPs')}
-                                <span class="sr-pill tone-${st.enabled ? 'green' : 'slate'}"><span class="sr-dot"></span>${st.enabled ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span>
+                            <div class="sr-card-title"><i class="mdi mdi-lan"></i> ${__('ip_sec_autoblock_title', 'Automatic blocking')}
+                                <span class="sr-pill tone-${st.autoblock ? 'green' : 'slate'}"><span class="sr-dot"></span>${st.autoblock ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span>
                             </div>
                         </div>
-                        <p class="as-int-hint" style="padding: 12px 18px 0">${escapeHtml(__('ip_access_hint', 'When on, sign-in and every page work only from the IPs / ranges below. Others are refused at sign-in and signed out. Attendance devices and the sync agent are not affected.'))}</p>
+                        <p class="as-int-hint" style="padding: 12px 18px 0">${escapeHtml(__('ip_sec_autoblock_hint', 'An IP with too many failed sign-ins (wrong password / OTP / unknown IDs) is blocked on every page, the login page included. Trusted IPs and IPs someone signed in from successfully in the last 30 days are never blocked automatically, so a shared office IP stays safe.'))}</p>
                         <div class="as-fields">
                             <div class="as-field">
-                                <div class="as-field-label">${__('ip_access_enable_label', 'Restrict access by IP')}</div>
-                                <div class="as-field-control">
-                                    <div class="custom-control custom-switch">
-                                        <input type="checkbox" class="custom-control-input" id="ipacc-enabled" ${enabledNow ? 'checked' : ''}>
-                                        <label class="custom-control-label" for="ipacc-enabled">${__('ip_access_enable_switch', 'Only allow the listed IPs')}</label>
-                                    </div>
-                                </div>
+                                <div class="as-field-label">${__('ip_sec_autoblock_label', 'Block suspicious IPs automatically')}</div>
+                                <div class="as-field-control"><div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input" id="ipsec-auto" ${st.autoblock ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="ipsec-auto">${__('enabled', 'Enabled')}</label>
+                                </div></div>
                             </div>
                             <div class="as-field">
-                                <label class="as-field-label" for="ipacc-scope">${__('ip_access_scope', 'Applies to')}</label>
-                                <div class="as-field-control">
-                                    <select class="form-control" id="ipacc-scope">
-                                        <option value="staff" ${scopeNow !== 'all' ? 'selected' : ''}>${__('ip_access_scope_staff', 'Staff only (employees can still sign in from anywhere)')}</option>
-                                        <option value="all" ${scopeNow === 'all' ? 'selected' : ''}>${__('ip_access_scope_all', 'Everyone (staff and employees)')}</option>
-                                    </select>
-                                </div>
+                                <label class="as-field-label" for="ipsec-fails">${__('ip_sec_fails_label', 'Failed sign-ins (within 15 minutes)')}</label>
+                                <div class="as-field-control"><input type="number" min="3" max="100" class="form-control" id="ipsec-fails" value="${st.fails}" style="max-width:140px"></div>
+                            </div>
+                            <div class="as-field">
+                                <label class="as-field-label" for="ipsec-ids">${__('ip_sec_ids_label', 'Different IDs tried (within 15 minutes)')}</label>
+                                <div class="as-field-control"><input type="number" min="2" max="50" class="form-control" id="ipsec-ids" value="${st.ids}" style="max-width:140px"></div>
                             </div>
                             <div class="as-field">
                                 <div class="as-field-label">${__('ip_access_your_ip', 'Your current IP')}</div>
                                 <div class="as-field-control" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                                     <b class="sr-mono">${escapeHtml(myIp || '-')}</b>
-                                    <span class="sr-pill tone-${ipInList(myIp) ? 'green' : 'amber'}">${ipInList(myIp) ? __('ip_access_in_list', 'In the list') : __('ip_access_not_in_list', 'Not in the list')}</span>
-                                    ${myIp && !ipInList(myIp) ? `<button type="button" class="sr-btn sr-btn-sm" id="ipacc-add-mine"><i class="mdi mdi-plus"></i> ${__('ip_access_add_mine', 'Add my IP')}</button>` : ''}
+                                    ${myRule === 'trust' ? `<span class="sr-pill tone-green">${__('ip_sec_trusted', 'Trusted')}</span>`
+                                        : `<button type="button" class="sr-btn sr-btn-sm ipsec-trust" data-ip="${escapeHtml(myIp)}"><i class="mdi mdi-check"></i> ${__('ip_sec_trust_mine', 'Trust my IP')}</button>`}
                                 </div>
                             </div>
                         </div>
-                        <div class="sr-table-wrap">
-                            <table class="sr-table table mb-0">
-                                <thead><tr>
-                                    <th style="width:42%">${__('ip_access_ip_col', 'IP address / range')}</th>
-                                    <th>${__('ip_access_label_col', 'Label')}</th>
-                                    <th class="text-right" style="width:70px"></th>
-                                </tr></thead>
-                                <tbody id="ipacc-body">
-                                    ${rows.length ? rows.map(rowHtml).join('') : `<tr><td colspan="3" class="text-muted text-center">${__('ip_access_no_ips', 'No IPs added yet')}</td></tr>`}
-                                </tbody>
-                            </table>
-                        </div>
                         <div class="as-section-foot">
-                            <button type="button" class="sr-btn sr-btn-sm" id="ipacc-add"><i class="mdi mdi-plus"></i> ${__('ip_access_add_row', 'Add IP')}</button>
-                            <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="ipacc-save"><i class="mdi mdi-content-save"></i> ${__('save_changes', 'Save Changes')}</button>
+                            <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="ipsec-save-auto"><i class="mdi mdi-content-save"></i> ${__('save_changes', 'Save Changes')}</button>
                         </div>
                     </div>
+
                     <div class="sr-card as-section">
-                        <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-close-circle"></i> ${__('ip_access_blocked_title', 'Recently refused')}</div></div>
-                        <div class="sr-table-wrap">
-                            <table class="sr-table table mb-0">
-                                <thead><tr><th>${__('ip_access_ip_col', 'IP address / range')}</th><th>${__('id_iqama', 'ID / Iqama')}</th><th>${__('date', 'Date')}</th><th class="text-right"></th></tr></thead>
-                                <tbody>
-                                    ${blocked.length ? blocked.map(b => `<tr>
-                                        <td class="sr-mono">${escapeHtml(b.ip)}</td><td class="sr-mono">${escapeHtml(b.user || '-')}</td><td class="sr-mono">${escapeHtml(b.at)}</td>
-                                        <td class="text-right">${ipInList(b.ip) ? '' : `<button type="button" class="sr-btn sr-btn-sm ipacc-allow" data-ip="${escapeHtml(b.ip)}"><i class="mdi mdi-plus"></i> ${__('ip_access_allow', 'Allow')}</button>`}</td>
-                                    </tr>`).join('') : `<tr><td colspan="4" class="text-muted text-center">${__('ip_access_none_blocked', 'Nothing refused yet')}</td></tr>`}
-                                </tbody>
-                            </table>
+                        <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-close-circle"></i> ${__('ip_sec_blocked_title', 'Blocked IPs')} <span class="sr-chip">${state.blocked.length}</span></div></div>
+                        <div class="sr-table-wrap"><table class="sr-table table mb-0">
+                            <thead><tr><th>${__('ip_access_ip_col', 'IP address / range')}</th><th>${__('ip_sec_reason', 'Reason')}</th><th>${__('date', 'Date')}</th><th></th></tr></thead>
+                            <tbody>${ruleRows(state.blocked, true)}</tbody>
+                        </table></div>
+                        ${addForm('block')}
+                    </div>
+
+                    <div class="sr-card as-section">
+                        <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-check-circle"></i> ${__('ip_sec_trusted_title', 'Trusted IPs')} <span class="sr-chip">${state.trusted.length}</span></div></div>
+                        <p class="as-int-hint" style="padding: 10px 18px 0">${escapeHtml(__('ip_sec_trusted_hint', 'Office and branch networks you know. Never blocked automatically.'))}</p>
+                        <div class="sr-table-wrap"><table class="sr-table table mb-0">
+                            <thead><tr><th>${__('ip_access_ip_col', 'IP address / range')}</th><th>${__('ip_access_label_col', 'Label')}</th><th>${__('date', 'Date')}</th><th></th></tr></thead>
+                            <tbody>${ruleRows(state.trusted, false)}</tbody>
+                        </table></div>
+                        ${addForm('trust')}
+                    </div>
+
+                    <div class="sr-card as-section">
+                        <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-earth"></i> ${__('ip_sec_activity_title', 'Sign-in activity by IP (last 7 days)')}</div></div>
+                        <div class="sr-table-wrap"><table class="sr-table table mb-0">
+                            <thead><tr><th>${__('ip_access_ip_col', 'IP address / range')}</th><th>${__('ip_sec_users', 'Users')}</th><th class="text-center">${__('ip_sec_ok', 'Signed in')}</th><th class="text-center">${__('ip_sec_failed', 'Failed')}</th><th>${__('ip_sec_last_seen', 'Last seen')}</th><th></th></tr></thead>
+                            <tbody>${state.activity.length ? state.activity.slice(0, showAllActivity ? undefined : ACTIVITY_ROWS).map(a => `<tr${a.rule === 'block' ? ' class="ipsec-row-blocked"' : ''}>
+                                <td class="sr-mono"><b>${escapeHtml(a.ip)}</b>${a.ip === myIp ? ` <span class="sr-pill tone-sky">${__('ip_sec_you', 'You')}</span>` : ''}</td>
+                                <td class="ipsec-users">${a.users.map(u => `<span title="${escapeHtml(u.id)}">${escapeHtml(u.name || u.id)}</span>`).join(', ')}${Number(a.ids) > a.users.length ? ` +${Number(a.ids) - a.users.length}` : ''}</td>
+                                <td class="text-center"><span class="sr-pill tone-${Number(a.ok) ? 'green' : 'slate'}">${a.ok}</span></td>
+                                <td class="text-center"><span class="sr-pill tone-${Number(a.failed) ? 'red' : 'slate'}">${a.failed}</span></td>
+                                <td class="sr-mono">${escapeHtml(a.last_seen)}</td>
+                                <td class="text-right" style="white-space:nowrap">${a.rule === 'block' ? `<span class="sr-pill tone-red">${__('ip_sec_blocked', 'Blocked')}</span>`
+                                    : a.rule === 'trust' ? `<span class="sr-pill tone-green">${__('ip_sec_trusted', 'Trusted')}</span>`
+                                    : `<button type="button" class="sr-btn sr-btn-sm ipsec-trust" data-ip="${escapeHtml(a.ip)}"><i class="mdi mdi-check"></i> ${__('ip_sec_trust', 'Trust')}</button>
+                                       ${a.ip === myIp ? '' : `<button type="button" class="sr-btn sr-btn-sm sr-btn-danger ipsec-block" data-ip="${escapeHtml(a.ip)}"><i class="mdi mdi-close-circle"></i> ${__('ip_sec_block', 'Block')}</button>`}`}</td>
+                            </tr>`).join('') : `<tr><td colspan="6" class="text-muted text-center">${__('ip_sec_no_activity', 'No sign-in activity yet')}</td></tr>`}</tbody>
+                        </table></div>
+                        ${state.activity.length > ACTIVITY_ROWS ? `<div class="as-section-foot"><button type="button" class="sr-btn sr-btn-sm" id="ipsec-more">
+                            <i class="mdi ${showAllActivity ? 'mdi-chevron-up' : 'mdi-chevron-down'}"></i> ${showAllActivity ? __('show_less', 'Show less') : __('show_all', 'Show all') + ' (' + state.activity.length + ')'}</button></div>` : ''}
+                    </div>
+
+                    <div class="sr-card as-section">
+                        <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-domain"></i> ${__('ip_sec_office_title', 'Office-only mode (optional)')}
+                            <span class="sr-pill tone-${st.enabled ? 'green' : 'slate'}"><span class="sr-dot"></span>${st.enabled ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span></div></div>
+                        <p class="as-int-hint" style="padding: 12px 18px 0">${escapeHtml(__('ip_sec_office_hint', 'Strict: only trusted IPs may sign in at all. Leave off unless every user works from a known network.'))}</p>
+                        <div class="as-fields">
+                            <div class="as-field">
+                                <div class="as-field-label">${__('ip_access_enable_switch', 'Only allow trusted IPs')}</div>
+                                <div class="as-field-control"><div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input" id="ipsec-office" ${st.enabled ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="ipsec-office">${__('enabled', 'Enabled')}</label>
+                                </div></div>
+                            </div>
+                            <div class="as-field">
+                                <label class="as-field-label" for="ipsec-scope">${__('ip_access_scope', 'Applies to')}</label>
+                                <div class="as-field-control"><select class="form-control" id="ipsec-scope">
+                                    <option value="staff" ${st.scope !== 'all' ? 'selected' : ''}>${__('ip_access_scope_staff', 'Staff only (employees can still sign in from anywhere)')}</option>
+                                    <option value="all" ${st.scope === 'all' ? 'selected' : ''}>${__('ip_access_scope_all', 'Everyone (staff and employees)')}</option>
+                                </select></div>
+                            </div>
+                        </div>
+                        ${st.blocked.length ? `<div class="sr-table-wrap"><table class="sr-table table mb-0">
+                            <thead><tr><th>${__('ip_access_blocked_title', 'Recently refused')}</th><th>${__('id_iqama', 'ID / Iqama')}</th><th>${__('date', 'Date')}</th></tr></thead>
+                            <tbody>${st.blocked.map(b => `<tr><td class="sr-mono">${escapeHtml(b.ip)}</td><td class="sr-mono">${escapeHtml(b.user || '-')}</td><td class="sr-mono">${escapeHtml(b.at)}</td></tr>`).join('')}</tbody>
+                        </table></div>` : ''}
+                        <div class="as-section-foot">
+                            <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="ipsec-save-office"><i class="mdi mdi-content-save"></i> ${__('save_changes', 'Save Changes')}</button>
                         </div>
                     </div>`;
 
-                const current = () => ({ enabled: root.querySelector('#ipacc-enabled').checked, scope: root.querySelector('#ipacc-scope').value });
-                const addRow = (ip) => { const k = current(); readRows(); rows.push({ ip: ip || '', label: '' }); draw(k); };
-                root.querySelector('#ipacc-add').addEventListener('click', () => {
-                    addRow('');
-                    const inputs = root.querySelectorAll('.ipacc-ip');
-                    if (inputs.length) inputs[inputs.length - 1].focus();
-                });
-                const mine = root.querySelector('#ipacc-add-mine');
-                if (mine) mine.addEventListener('click', () => addRow(myIp));
-                root.querySelectorAll('.ipacc-allow').forEach(btn => btn.addEventListener('click', () => addRow(btn.dataset.ip)));
-                root.querySelectorAll('.ipacc-del').forEach(btn => btn.addEventListener('click', () => {
-                    const k = current();
-                    readRows();
-                    rows.splice(parseInt(btn.closest('tr').dataset.idx, 10), 1);
-                    draw(k);
+                const more = root.querySelector('#ipsec-more');
+                if (more) more.addEventListener('click', () => { showAllActivity = !showAllActivity; draw(); });
+                root.querySelectorAll('.ipsec-trust').forEach(b => b.addEventListener('click', () => trustIp(b.dataset.ip)));
+                root.querySelectorAll('.ipsec-block').forEach(b => b.addEventListener('click', () => blockIp(b.dataset.ip)));
+                root.querySelectorAll('.ipsec-del').forEach(b => b.addEventListener('click', () => removeRule(b.dataset.id, b.dataset.block === '1')));
+                root.querySelectorAll('.ipsec-add-btn').forEach(b => b.addEventListener('click', () => {
+                    const rule = b.dataset.rule;
+                    const ip = root.querySelector(`.ipsec-add-ip[data-rule="${rule}"]`).value.trim();
+                    const label = root.querySelector(`.ipsec-add-label[data-rule="${rule}"]`).value.trim();
+                    if (!ip) return;
+                    run({ action: 'ip_rule_add', rule, ip, label }, rule === 'block' ? __('ip_sec_blocked_done', 'IP blocked') : __('ip_sec_trusted_done', 'IP trusted'));
                 }));
-                root.querySelector('#ipacc-save').addEventListener('click', save);
+                root.querySelector('#ipsec-save-auto').addEventListener('click', () => run({
+                    action: 'save_ip_autoblock',
+                    enabled: root.querySelector('#ipsec-auto').checked ? '1' : '0',
+                    fails: root.querySelector('#ipsec-fails').value,
+                    ids: root.querySelector('#ipsec-ids').value
+                }, __('saved_successfully', 'Saved successfully.')));
+                root.querySelector('#ipsec-save-office').addEventListener('click', async () => {
+                    const enabled = root.querySelector('#ipsec-office').checked;
+                    if (enabled && !state.settings.enabled) {
+                        const answer = await Swal.fire({
+                            icon: 'warning', showCancelButton: true, allowOutsideClick: false,
+                            title: __('ip_access_confirm_title', 'Allow only trusted IPs?'),
+                            text: __('ip_access_confirm_text', 'Users outside the trusted IPs are refused at sign-in and signed out on their next click. If you get locked out, set ip_access_enabled to 0 in the app_settings table.'),
+                            confirmButtonText: __('turn_on', 'Turn on'), cancelButtonText: __('cancel', 'Cancel')
+                        });
+                        if (!answer.isConfirmed) return;
+                    }
+                    run({ action: 'save_ip_access_mode', enabled: enabled ? '1' : '0', scope: root.querySelector('#ipsec-scope').value }, __('saved_successfully', 'Saved successfully.'));
+                });
             }
 
-            async function save() {
-                readRows();
-                const enabled = root.querySelector('#ipacc-enabled').checked;
-                const scope = root.querySelector('#ipacc-scope').value;
-                if (enabled && !state.settings.enabled) {
-                    const answer = await Swal.fire({
-                        icon: 'warning',
-                        title: __('ip_access_confirm_title', 'Restrict access by IP?'),
-                        text: __('ip_access_confirm_text', 'Users outside the listed IPs are refused at sign-in and signed out on their next click. If you get locked out, set ip_access_enabled to 0 in the app_settings table.'),
-                        showCancelButton: true,
-                        allowOutsideClick: false,
-                        confirmButtonText: __('turn_on', 'Turn on'),
-                        cancelButtonText: __('cancel', 'Cancel')
-                    });
-                    if (!answer.isConfirmed) return;
-                }
-                try {
-                    const data = await post({ action: 'save_ip_access', enabled: enabled ? '1' : '0', scope, list: JSON.stringify(rows) });
-                    if (!data.success) throw new Error(data.message || __('error', 'Error'));
-                    state = data;
-                    rows = (data.settings.list || []).map(r => ({ ip: r.ip, label: r.label }));
-                    draw();
-                    Swal.fire({ icon: 'success', title: data.message || __('saved_successfully', 'Saved successfully.'), timer: 1500, showConfirmButton: false });
-                } catch (e) {
-                    Swal.fire(__('error', 'Error'), e.message, 'error');
-                }
-            }
-
-            post({ action: 'get_ip_access' }).then(data => {
+            post({ action: 'get_ip_security' }).then(data => {
                 if (!data.success) throw new Error(data.message || __('error', 'Error'));
                 state = data;
-                rows = (data.settings.list || []).map(r => ({ ip: r.ip, label: r.label }));
                 draw();
             }).catch(e => { root.innerHTML = `<p class="text-danger">${escapeHtml(e.message)}</p>`; });
         }

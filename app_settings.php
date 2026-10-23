@@ -838,6 +838,12 @@
         .as-int-title b { font-size: 14px; color: var(--sr-text); }
         .as-int-hint { margin: 0; font-size: 12.5px; color: var(--sr-muted); line-height: 1.5; flex: 1; }
         .as-int-foot { padding-top: 10px; border-top: 1px solid var(--sr-border); }
+        /* IP Security tab (Integrations) */
+        .ipsec-add { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--sr-border); background: var(--sr-surface-2); }
+        .ipsec-add .ipsec-add-ip { flex: 0 1 220px; }
+        .ipsec-add .ipsec-add-label { flex: 1 1 200px; }
+        .ipsec-users { max-width: 340px; font-size: 12.5px; }
+        tr.ipsec-row-blocked td { background: var(--tone-red-bg, #fef2f2); }
         /* status line under a card's hint (e.g. Cloudflare: how this page was reached) - wraps, unlike a pill */
         .as-int-status { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; font-weight: 600; line-height: 1.45;
             color: var(--tone-slate-fg, #475569); background: var(--tone-slate-bg, #f1f5f9); border: 1px solid var(--tone-slate-bd, #e2e8f0); }
