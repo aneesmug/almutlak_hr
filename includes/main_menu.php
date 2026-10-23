@@ -1152,7 +1152,32 @@ if ($sbv2Logo === '') { $sbv2Logo = (string) get_setting($conDB, 'logo'); }
 // session_check.php enforces server-side, so this is a live mirror, not a separate clock.
 if (isset($_SESSION['auth_user'], $_SESSION['timeout_duration'], $_SESSION['last_activity'])) {
     $sessionCountdownRemaining = max(0, (int) $_SESSION['timeout_duration'] - (time() - (int) $_SESSION['last_activity']));
+    // Security badges in the page footer: how this session signed in (Microsoft / Google 2FA)
+    // and whether this page came through Cloudflare (App Settings > Integrations)
+    $securityBadges = [];
+    $sessionLoginMethod = (string) ($_SESSION['login_method'] ?? '');
+    if ($sessionLoginMethod === 'microsoft') {
+        $securityBadges[] = ['ms', __('security_badge_microsoft', 'Signed in with Microsoft (2FA)'), __('security_badge_2fa_caption', '2FA sign-in'), 'Microsoft',
+            '<span class="ssd-ms-logo" aria-hidden="true"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>'];
+    } elseif ($sessionLoginMethod === 'google') {
+        $securityBadges[] = ['ga', __('security_badge_google', 'Signed in with Google Authenticator (2FA)'), __('security_badge_2fa_caption', '2FA sign-in'), 'Google Authenticator',
+            '<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="#4285f4" stroke-width="6"/><path d="M24 5a19 19 0 0 1 16.5 9.5" fill="none" stroke="#ea4335" stroke-width="6"/><path d="M40.5 33.5A19 19 0 0 1 24 43" fill="none" stroke="#34a853" stroke-width="6"/><path d="M24 15v9l6 4" fill="none" stroke="#5f6368" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>'];
+    }
+    if (function_exists('cloudflare_proxy_enabled') && cloudflare_proxy_enabled() && in_array(cloudflare_request_info()['mode'], ['app', 'server'], true)) {
+        $securityBadges[] = ['cf', __('security_badge_cloudflare', 'Protected by Cloudflare'), __('security_badge_protected_caption', 'Protected by'), 'Cloudflare', '<i class="fa fa-cloud" aria-hidden="true"></i>'];
+    }
 ?>
+<?php if ($securityBadges): ?>
+<div id="session-security-badges" hidden>
+<?php foreach ($securityBadges as [$badgeKey, $badgeTitle, $badgeCaption, $badgeName, $badgeIcon]): ?>
+    <span class="ssd-seal ssd-<?= $badgeKey ?>" title="<?= htmlspecialchars($badgeTitle, ENT_QUOTES, 'UTF-8') ?>">
+        <span class="ssd-ico"><?= $badgeIcon ?></span>
+        <span class="ssd-text"><small><?= htmlspecialchars($badgeCaption, ENT_QUOTES, 'UTF-8') ?></small><b><?= htmlspecialchars($badgeName, ENT_QUOTES, 'UTF-8') ?></b></span>
+        <i class="fa fa-circle-check ssd-ok" aria-hidden="true"></i>
+    </span>
+<?php endforeach; ?>
+</div>
+<?php endif; ?>
 <div id="session-countdown-badge" data-remaining="<?= $sessionCountdownRemaining ?>" data-timeout="<?= (int) $_SESSION['timeout_duration'] ?>" title="<?= htmlspecialchars(__('session_time_remaining', 'Session time remaining'), ENT_QUOTES, 'UTF-8') ?>">
     <i class="fa fa-clock"></i>
     <span id="session-countdown-text">--:--</span>
@@ -1185,9 +1210,90 @@ if (isset($_SESSION['auth_user'], $_SESSION['timeout_duration'], $_SESSION['last
         right: auto;
         left: 20px;
     }
+    /* Security badges (2FA / Cloudflare) in the page footer, after the copyright */
+    footer.footer.has-security-badges {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        padding-top: 13px;
+        padding-bottom: 13px;
+    }
+    /* Trust seals: white tile, brand-coloured icon box, caption + name, green check */
+    #session-security-badges { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    #session-security-badges .ssd-seal {
+        --seal: #64748b;
+        --seal-soft: #f1f5f9;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 4px 12px 4px 4px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        cursor: help;
+        user-select: none;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    #session-security-badges .ssd-seal:hover { border-color: var(--seal); box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08); }
+    #session-security-badges .ssd-ms { --seal: #0078d4; --seal-soft: #eff6fc; }
+    #session-security-badges .ssd-ga { --seal: #1a73e8; --seal-soft: #eef4fe; }
+    #session-security-badges .ssd-cf { --seal: #f38020; --seal-soft: #fff4ea; }
+    #session-security-badges .ssd-ico {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--seal-soft);
+    }
+    #session-security-badges .ssd-cf .ssd-ico i { color: #f38020; font-size: 16px; }
+    #session-security-badges .ssd-ms-logo { display: grid; grid-template-columns: 7px 7px; gap: 1.5px; }
+    #session-security-badges .ssd-ms-logo i { width: 7px; height: 7px; display: block; }
+    #session-security-badges .ssd-text { display: flex; flex-direction: column; line-height: 1.15; white-space: nowrap; }
+    #session-security-badges .ssd-text small { font-size: 9.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #94a3b8; }
+    #session-security-badges .ssd-text b { font-size: 12.5px; font-weight: 700; color: #1e293b; }
+    #session-security-badges .ssd-ok { font-size: 13px; color: #16a34a; margin-inline-start: 2px; }
+    html.app-dark #session-security-badges .ssd-seal { background: #1b2130; border-color: #2a3140; box-shadow: none; }
+    html.app-dark #session-security-badges .ssd-text b { color: #e5e7eb; }
+    html.app-dark #session-security-badges .ssd-ico { background: rgba(255, 255, 255, 0.06); }
 </style>
 <script>
 (function () {
+    // Countdown and badges are printed inside the side menu. The countdown moves to <body>: the side menu
+    // slides off-screen on phones (transform) and would take the fixed badge along. The security badges
+    // move into the page's own <footer class="footer"> (every page prints one after this); pages without
+    // a footer don't show them.
+    function placeBadges() {
+        var countdown = document.getElementById('session-countdown-badge');
+        if (countdown && countdown.parentNode !== document.body) document.body.appendChild(countdown);
+        var badges = document.getElementById('session-security-badges');
+        var footer = document.querySelector('footer.footer');
+        if (!badges || !footer) return;
+        footer.classList.add('has-security-badges');
+        footer.appendChild(badges);
+        badges.hidden = false;
+        // The footer sits position:absolute at the bottom of its page; if it wraps to two lines
+        // (phones) give the page enough bottom space so it never covers the last content
+        var fitFooter = function () {
+            var holder = footer.parentElement;
+            if (!holder) return;
+            holder.style.removeProperty('padding-bottom');
+            var need = footer.offsetHeight + 10;
+            if (parseFloat(getComputedStyle(holder).paddingBottom) < need) holder.style.setProperty('padding-bottom', need + 'px', 'important');
+        };
+        fitFooter();
+        window.addEventListener('resize', fitFooter);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', placeBadges);
+    } else {
+        placeBadges();
+    }
     var badge = document.getElementById('session-countdown-badge');
     if (!badge) {
         return;
