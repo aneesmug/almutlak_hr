@@ -13,6 +13,7 @@ require_once(__DIR__ . "/screen_settings_helper.php");
 require_once(__DIR__ . "/zk_helpers.php");
 require_once(__DIR__ . "/MicrosoftAuth/microsoft_auth.php");
 require_once(__DIR__ . "/GoogleAuth/google_auth.php");
+require_once(__DIR__ . "/ip_access.php");
 require_once(__DIR__ . "/two_factor.php");
 require_once(__DIR__ . "/../vendor/autoload.php");
 
@@ -143,6 +144,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['success' => $gaOk, 'message' => $gaMessage]);
             }
             break;
+        case 'get_ip_access':
+        case 'save_ip_access':
+            // App access by IP (Integrations > Allowed IPs): system admins only
+            if (!($is_system_admin ?? false)) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Access denied.']);
+                break;
+            }
+            if ($action === 'save_ip_access') {
+                $ipList = json_decode((string) ($_POST['list'] ?? '[]'), true);
+                [$ipOk, $ipMessage] = ip_access_save($conDB, ($_POST['enabled'] ?? '') === '1', (string) ($_POST['scope'] ?? ''),
+                    is_array($ipList) ? $ipList : [], (string) ($actual_user_type ?? $user_type ?? ''));
+                if (!$ipOk) {
+                    echo json_encode(['success' => false, 'message' => $ipMessage]);
+                    break;
+                }
+            }
+            echo json_encode(['success' => true, 'message' => $ipMessage ?? '', 'settings' => ip_access_settings($conDB, true), 'my_ip' => (string) ($_SERVER['REMOTE_ADDR'] ?? '')]);
+            break;
         case 'test_msauth':
             // Microsoft Sign-in config is system-admin only (it holds the client secret)
             if (!($is_system_admin ?? false)) {
@@ -204,7 +224,7 @@ function get_all_settings($conDB) {
     // memo_templates_version is an internal counter the memo page maintains itself
     // (see memo_helper.php) - showing it made a "Memo Internal" tab with a field
     // nobody should type into.
-    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled', 'msauth_enabled', 'msauth_scope', 'gauth_enabled', 'gauth_scope', 'email_otp_fallback', 'cloudflare_enabled') ORDER BY setting_group, id";
+    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled', 'msauth_enabled', 'msauth_scope', 'gauth_enabled', 'gauth_scope', 'email_otp_fallback', 'cloudflare_enabled') AND setting_group <> 'ip_access' ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 
     if ($result) {
@@ -294,6 +314,9 @@ function update_all_settings($conDB) {
         foreach ($text_inputs as $setting_name => $value) {
             if ((strpos((string)$setting_name, 'd365_') === 0 || strpos((string)$setting_name, 'msauth_') === 0 || strpos((string)$setting_name, 'gauth_') === 0 || $setting_name === 'attendance_enabled' || $setting_name === 'email_otp_fallback' || $setting_name === 'cloudflare_enabled') && !($is_system_admin ?? false)) {
                 continue; // D365 Config, Microsoft Sign In and the Integrations switches are system-admin only (see get_all_settings)
+            }
+            if (strpos((string)$setting_name, 'ip_access_') === 0) {
+                continue; // Allowed IPs are saved only through save_ip_access (validation + lock-out guard)
             }
             if ($setting_name === 'msauth_client_secret' && trim((string)$value) === '') {
                 continue; // blank = keep the saved secret (it is never sent to the browser)

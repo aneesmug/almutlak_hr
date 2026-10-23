@@ -75,7 +75,7 @@ function __(key, def) {
         // Email OTP backup for 2FA users (Integrations tab) - on unless switched off
         const EMAIL_OTP_FALLBACK_ON = (window.APP_SETTINGS_PERMISSIONS || {}).emailOtpFallback !== false;
         const CLOUDFLARE_ON = (window.APP_SETTINGS_PERMISSIONS || {}).cloudflareEnabled === true;
-        const CLOUDFLARE_DETECTED = (window.APP_SETTINGS_PERMISSIONS || {}).cloudflareDetected === true;
+        const CLOUDFLARE_INFO = (window.APP_SETTINGS_PERMISSIONS || {}).cloudflareInfo || { mode: 'none', ip: '', edge: '' };
         const ATTENDANCE_KEYS = ['manage_device_monitor', 'manage_attendance', 'add_manual_attendance', 'edit_attendance_record', 'delete_attendance_record', 'manage_attendance_config', 'view_employee_attendance_tab', 'attendance'];
         // Keys / report types of a switched-off integration: hidden in the UI, kept when saving
         const isHiddenFeatureKey = key => (!D365_ON && isD365Key(key)) || (!ATTENDANCE_ON && ATTENDANCE_KEYS.includes(String(key || '')));
@@ -4649,9 +4649,17 @@ function __(key, def) {
                     offHint: __('cloudflare_disabled_hint', 'Off - the app uses the connecting IP as is. Turn on once the domain is proxied through Cloudflare (orange cloud), otherwise every user shares a few Cloudflare IPs.'),
                     confirmOn: __('cloudflare_enable_confirm_text', 'The app will use the real visitor IP that Cloudflare sends for requests coming from Cloudflare.'),
                     confirmOff: __('cloudflare_disable_confirm_text', 'If the site is still behind Cloudflare, all users will share a few Cloudflare IPs: request limits and login lockouts then hit everyone together.'),
-                    status: CLOUDFLARE_DETECTED
-                        ? { tone: 'green', icon: 'mdi-check-circle', text: __('cloudflare_detected', 'This page was opened through Cloudflare') }
-                        : { tone: 'slate', icon: 'mdi-information-outline', text: __('cloudflare_not_detected', 'This page was not opened through Cloudflare') },
+                    status: (() => {
+                        const ip = CLOUDFLARE_INFO.ip || '-';
+                        const edge = CLOUDFLARE_INFO.edge || '-';
+                        return ({
+                            app:    { tone: 'green', icon: 'mdi-check-circle', text: __('cloudflare_mode_app', 'Through Cloudflare - your real IP: {ip}').replace('{ip}', ip) },
+                            server: { tone: 'green', icon: 'mdi-check-circle', text: __('cloudflare_mode_server', 'Through Cloudflare - the server already gives the real IP: {ip}').replace('{ip}', ip) },
+                            edge:   { tone: 'amber', icon: 'mdi-alert', text: __('cloudflare_mode_edge', 'Through Cloudflare - the app sees Cloudflare IP {ip}. Turn the switch on.').replace('{ip}', ip) },
+                            header: { tone: 'amber', icon: 'mdi-alert', text: __('cloudflare_mode_header', 'Cloudflare headers from {ip}, which is not a Cloudflare IP - not trusted').replace('{ip}', edge) },
+                            none:   { tone: 'slate', icon: 'mdi-information-outline', text: __('cloudflare_mode_none', 'This page was not opened through Cloudflare (your IP: {ip})').replace('{ip}', ip) },
+                        })[CLOUDFLARE_INFO.mode] || null;
+                    })(),
                 },
                 {
                     tab: '2fa', setting: 'msauth_enabled', on: MSAUTH_ON, icon: msLogo,
@@ -4688,9 +4696,13 @@ function __(key, def) {
             const intTabs = [
                 { key: 'addons', icon: 'mdi-puzzle', label: __('integrations_addons', 'Add-ons') },
                 { key: '2fa', icon: 'mdi-security', label: __('integrations_2fa', '2FA') },
+                { key: 'ipaccess', icon: 'mdi-lan', label: __('ip_access_tab', 'Allowed IPs') },
             ];
             let intTab = 'addons';
-            try { intTab = localStorage.getItem('integrations_sub_tab') === '2fa' ? '2fa' : 'addons'; } catch (e) {}
+            try {
+                const savedTab = localStorage.getItem('integrations_sub_tab');
+                if (intTabs.some(t => t.key === savedTab)) intTab = savedTab;
+            } catch (e) {}
             const intCard = it => `
                         <div class="sr-card as-int-card${it.on ? ' is-on' : ''}">
                             <div class="as-int-top">
@@ -4713,7 +4725,8 @@ function __(key, def) {
                 <div class="tab-pane active" id="group-integrations" role="tabpanel">
                     ${srTabHead(meta.icon, __('integrations', 'Integrations'), __('integrations_hint', 'Turn modules and connections to external systems on or off for the whole app.'))}
                     ${srSubNav('integrations-sub-nav', intTabs, intTab)}
-                    ${intTabs.map(t => `
+                    ${intTabs.map(t => t.key === 'ipaccess' ? `
+                    <div data-int-pane="ipaccess"${t.key === intTab ? '' : ' style="display:none"'}><div id="ipacc-root"><p class="as-int-hint">${__('loading', 'Loading')}...</p></div></div>` : `
                     <div class="as-int-grid" data-int-pane="${t.key}"${t.key === intTab ? '' : ' style="display:none"'}>
                         ${integrations.filter(it => it.tab === t.key).map(intCard).join('')}
                     </div>`).join('')}
@@ -4726,6 +4739,7 @@ function __(key, def) {
                 settingsContainer.querySelectorAll('[data-int-pane]').forEach(p => { p.style.display = p.dataset.intPane === key ? '' : 'none'; });
                 try { localStorage.setItem('integrations_sub_tab', key); } catch (err) {} // kept across the reload after a switch
             }));
+            renderIpAccessPane(document.getElementById('ipacc-root'));
             settingsContainer.querySelectorAll('.integration-toggle').forEach(toggle => toggle.addEventListener('change', async function () {
                 const it = integrations.find(x => x.setting === toggle.dataset.setting);
                 const on = toggle.checked;
@@ -4754,6 +4768,163 @@ function __(key, def) {
                     Swal.fire(__('error', 'Error'), e.message, 'error');
                 }
             }));
+        }
+
+        // --- Integrations > Allowed IPs: app access only from listed IPs / ranges (includes/ip_access.php) ---
+        // Saved with its own action (validated; refuses a list that would lock out the admin saving it).
+        function renderIpAccessPane(root) {
+            if (!root) return;
+            const post = (params) => fetch('./includes/settings_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams(params)
+            }).then(r => r.json());
+            let state = null; // { settings: {enabled, scope, list, blocked}, my_ip }
+            let rows = [];
+
+            const ipInList = (ip) => rows.some(r => (r.ip || '').trim() === ip);
+            const rowHtml = (r, i) => `
+                <tr data-idx="${i}">
+                    <td><input type="text" class="form-control form-control-sm sr-mono ipacc-ip" value="${escapeHtml(r.ip || '')}" placeholder="5.41.90.162 / 5.41.90.0/24"></td>
+                    <td><input type="text" class="form-control form-control-sm ipacc-label" value="${escapeHtml(r.label || '')}" maxlength="80" placeholder="${escapeHtml(__('ip_access_label_ph', 'e.g. Head office'))}"></td>
+                    <td class="text-right"><button type="button" class="sr-btn sr-btn-sm sr-btn-ghost ipacc-del" title="${escapeHtml(__('delete', 'Delete'))}"><i class="mdi mdi-delete"></i></button></td>
+                </tr>`;
+
+            function readRows() {
+                rows = Array.from(root.querySelectorAll('#ipacc-body tr[data-idx]')).map(tr => ({
+                    ip: tr.querySelector('.ipacc-ip').value.trim(),
+                    label: tr.querySelector('.ipacc-label').value.trim()
+                }));
+            }
+
+            function draw(keep) {
+                // keep: unsaved switch / scope values while rows are added or removed
+                const st = state.settings;
+                const enabledNow = keep ? keep.enabled : st.enabled;
+                const scopeNow = keep ? keep.scope : st.scope;
+                const myIp = state.my_ip || '';
+                const blocked = st.blocked || [];
+                root.innerHTML = `
+                    <div class="sr-card as-section">
+                        <div class="sr-card-head">
+                            <div class="sr-card-title"><i class="mdi mdi-lan"></i> ${__('ip_access_title', 'Allowed IPs')}
+                                <span class="sr-pill tone-${st.enabled ? 'green' : 'slate'}"><span class="sr-dot"></span>${st.enabled ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span>
+                            </div>
+                        </div>
+                        <p class="as-int-hint" style="padding: 12px 18px 0">${escapeHtml(__('ip_access_hint', 'When on, sign-in and every page work only from the IPs / ranges below. Others are refused at sign-in and signed out. Attendance devices and the sync agent are not affected.'))}</p>
+                        <div class="as-fields">
+                            <div class="as-field">
+                                <div class="as-field-label">${__('ip_access_enable_label', 'Restrict access by IP')}</div>
+                                <div class="as-field-control">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="ipacc-enabled" ${enabledNow ? 'checked' : ''}>
+                                        <label class="custom-control-label" for="ipacc-enabled">${__('ip_access_enable_switch', 'Only allow the listed IPs')}</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="as-field">
+                                <label class="as-field-label" for="ipacc-scope">${__('ip_access_scope', 'Applies to')}</label>
+                                <div class="as-field-control">
+                                    <select class="form-control" id="ipacc-scope">
+                                        <option value="staff" ${scopeNow !== 'all' ? 'selected' : ''}>${__('ip_access_scope_staff', 'Staff only (employees can still sign in from anywhere)')}</option>
+                                        <option value="all" ${scopeNow === 'all' ? 'selected' : ''}>${__('ip_access_scope_all', 'Everyone (staff and employees)')}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="as-field">
+                                <div class="as-field-label">${__('ip_access_your_ip', 'Your current IP')}</div>
+                                <div class="as-field-control" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                                    <b class="sr-mono">${escapeHtml(myIp || '-')}</b>
+                                    <span class="sr-pill tone-${ipInList(myIp) ? 'green' : 'amber'}">${ipInList(myIp) ? __('ip_access_in_list', 'In the list') : __('ip_access_not_in_list', 'Not in the list')}</span>
+                                    ${myIp && !ipInList(myIp) ? `<button type="button" class="sr-btn sr-btn-sm" id="ipacc-add-mine"><i class="mdi mdi-plus"></i> ${__('ip_access_add_mine', 'Add my IP')}</button>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sr-table-wrap">
+                            <table class="sr-table table mb-0">
+                                <thead><tr>
+                                    <th style="width:42%">${__('ip_access_ip_col', 'IP address / range')}</th>
+                                    <th>${__('ip_access_label_col', 'Label')}</th>
+                                    <th class="text-right" style="width:70px"></th>
+                                </tr></thead>
+                                <tbody id="ipacc-body">
+                                    ${rows.length ? rows.map(rowHtml).join('') : `<tr><td colspan="3" class="text-muted text-center">${__('ip_access_no_ips', 'No IPs added yet')}</td></tr>`}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="as-section-foot">
+                            <button type="button" class="sr-btn sr-btn-sm" id="ipacc-add"><i class="mdi mdi-plus"></i> ${__('ip_access_add_row', 'Add IP')}</button>
+                            <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="ipacc-save"><i class="mdi mdi-content-save"></i> ${__('save_changes', 'Save Changes')}</button>
+                        </div>
+                    </div>
+                    <div class="sr-card as-section">
+                        <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-close-circle"></i> ${__('ip_access_blocked_title', 'Recently refused')}</div></div>
+                        <div class="sr-table-wrap">
+                            <table class="sr-table table mb-0">
+                                <thead><tr><th>${__('ip_access_ip_col', 'IP address / range')}</th><th>${__('id_iqama', 'ID / Iqama')}</th><th>${__('date', 'Date')}</th><th class="text-right"></th></tr></thead>
+                                <tbody>
+                                    ${blocked.length ? blocked.map(b => `<tr>
+                                        <td class="sr-mono">${escapeHtml(b.ip)}</td><td class="sr-mono">${escapeHtml(b.user || '-')}</td><td class="sr-mono">${escapeHtml(b.at)}</td>
+                                        <td class="text-right">${ipInList(b.ip) ? '' : `<button type="button" class="sr-btn sr-btn-sm ipacc-allow" data-ip="${escapeHtml(b.ip)}"><i class="mdi mdi-plus"></i> ${__('ip_access_allow', 'Allow')}</button>`}</td>
+                                    </tr>`).join('') : `<tr><td colspan="4" class="text-muted text-center">${__('ip_access_none_blocked', 'Nothing refused yet')}</td></tr>`}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>`;
+
+                const current = () => ({ enabled: root.querySelector('#ipacc-enabled').checked, scope: root.querySelector('#ipacc-scope').value });
+                const addRow = (ip) => { const k = current(); readRows(); rows.push({ ip: ip || '', label: '' }); draw(k); };
+                root.querySelector('#ipacc-add').addEventListener('click', () => {
+                    addRow('');
+                    const inputs = root.querySelectorAll('.ipacc-ip');
+                    if (inputs.length) inputs[inputs.length - 1].focus();
+                });
+                const mine = root.querySelector('#ipacc-add-mine');
+                if (mine) mine.addEventListener('click', () => addRow(myIp));
+                root.querySelectorAll('.ipacc-allow').forEach(btn => btn.addEventListener('click', () => addRow(btn.dataset.ip)));
+                root.querySelectorAll('.ipacc-del').forEach(btn => btn.addEventListener('click', () => {
+                    const k = current();
+                    readRows();
+                    rows.splice(parseInt(btn.closest('tr').dataset.idx, 10), 1);
+                    draw(k);
+                }));
+                root.querySelector('#ipacc-save').addEventListener('click', save);
+            }
+
+            async function save() {
+                readRows();
+                const enabled = root.querySelector('#ipacc-enabled').checked;
+                const scope = root.querySelector('#ipacc-scope').value;
+                if (enabled && !state.settings.enabled) {
+                    const answer = await Swal.fire({
+                        icon: 'warning',
+                        title: __('ip_access_confirm_title', 'Restrict access by IP?'),
+                        text: __('ip_access_confirm_text', 'Users outside the listed IPs are refused at sign-in and signed out on their next click. If you get locked out, set ip_access_enabled to 0 in the app_settings table.'),
+                        showCancelButton: true,
+                        allowOutsideClick: false,
+                        confirmButtonText: __('turn_on', 'Turn on'),
+                        cancelButtonText: __('cancel', 'Cancel')
+                    });
+                    if (!answer.isConfirmed) return;
+                }
+                try {
+                    const data = await post({ action: 'save_ip_access', enabled: enabled ? '1' : '0', scope, list: JSON.stringify(rows) });
+                    if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                    state = data;
+                    rows = (data.settings.list || []).map(r => ({ ip: r.ip, label: r.label }));
+                    draw();
+                    Swal.fire({ icon: 'success', title: data.message || __('saved_successfully', 'Saved successfully.'), timer: 1500, showConfirmButton: false });
+                } catch (e) {
+                    Swal.fire(__('error', 'Error'), e.message, 'error');
+                }
+            }
+
+            post({ action: 'get_ip_access' }).then(data => {
+                if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                state = data;
+                rows = (data.settings.list || []).map(r => ({ ip: r.ip, label: r.label }));
+                draw();
+            }).catch(e => { root.innerHTML = `<p class="text-danger">${escapeHtml(e.message)}</p>`; });
         }
 
         async function renderLicenseSettings() {

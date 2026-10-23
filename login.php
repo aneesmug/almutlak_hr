@@ -32,6 +32,7 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/translation_functions.php'; // Added for email translation
 require_once __DIR__ . '/includes/login_security.php';
 require_once __DIR__ . '/includes/two_factor.php'; // Microsoft Sign-in + Google Authenticator
+require_once __DIR__ . '/includes/ip_access.php'; // App Settings > Integrations > Allowed IPs
 require_once __DIR__ . '/includes/vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -64,6 +65,10 @@ try {
 
     // === FLOW 1: NEW USER REGISTRATION (normal employees; identity verified by DOB + registered mobile) ===
     if (!empty($_POST['new_password'])) {
+        if (!ip_access_allowed($conDB, 'employee')) { // Allowed IPs set to "Everyone"
+            ip_access_record_block($conDB, (string) $id_iqama);
+            throw new Exception(ip_access_denied_message());
+        }
         $new_password = $_POST['new_password'];
         $confirm_password = $_POST['confirm_password'] ?? '';
         $reg_dob = trim((string) ($_POST['reg_dob'] ?? ''));
@@ -128,6 +133,11 @@ try {
             throw new Exception('This ID is not registered. Please contact support.');
         }
         if ($user['status'] != 1) { throw new Exception('Your account is inactive. Please contact support.'); }
+        // App access by IP (App Settings > Integrations > Allowed IPs) - refused before any OTP / 2FA step
+        if (!ip_access_allowed($conDB, (string) $user['user_type'])) {
+            ip_access_record_block($conDB, (string) $user['id_iqama']);
+            throw new Exception(ip_access_denied_message());
+        }
         if (!empty($user['employee_name'])) { $user['fullname'] = $user['employee_name']; }
 
         // Only 'employee' user_type requires password authentication

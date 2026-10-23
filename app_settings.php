@@ -1080,7 +1080,7 @@
             'emailOtpFallback' => email_otp_fallback_enabled($conDB),
             // Cloudflare switch (Integrations tab) + whether this page was opened through Cloudflare
             'cloudflareEnabled' => cloudflare_proxy_enabled(),
-            'cloudflareDetected' => cloudflare_request_detected(),
+            'cloudflareInfo' => cloudflare_request_info(),
             'canAccessDepartmentsTab' => (bool) $canAccessDepartmentsTab,
             'canAccessJobTitlesTab' => (bool) $canAccessJobTitlesTab,
             'canAccessLocationsTab' => (bool) $canAccessLocationsTab,

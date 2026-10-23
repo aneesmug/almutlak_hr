@@ -384,6 +384,26 @@ require_once __DIR__ . '/app_datepicker_head.php';
 // never written back to admin_login, so it disappears automatically once the
 // vacation's return_date passes - no restore step required.
 $actual_user_type = $user_type;
+
+// --- App access by IP (App Settings > Integrations > Allowed IPs): a session used from an address
+// outside the list is signed out (also clears "remember me", or index.php would sign it straight back in)
+require_once __DIR__ . '/ip_access.php';
+if (!ip_access_allowed($conDB, (string) $actual_user_type)) {
+    ip_access_record_block($conDB, (string) ($_SESSION['auth_user']['user_id'] ?? ''));
+    $ipAccessMessage = ip_access_denied_message();
+    unset($_SESSION['auth_user']);
+    setcookie('remember_me', '', time() - 3600, '/');
+    if (app_is_json_request() || strpos($_SERVER['PHP_SELF'] ?? '', '/ajaxFile/') !== false) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['status' => 'error', 'success' => false, 'message' => $ipAccessMessage]);
+    } else {
+        $_SESSION['error_message'] = $ipAccessMessage;
+        header("Location: ./index.php");
+    }
+    exit();
+}
+
 $is_temp_role_active = false;
 $temp_role_assignment = getActiveTempRoleForEmployee($conDB, $empid);
 if ($temp_role_assignment) {

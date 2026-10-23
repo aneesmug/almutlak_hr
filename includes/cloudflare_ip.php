@@ -83,13 +83,34 @@ if (!function_exists('cloudflare_proxy_enabled')) {
         return is_file(CF_PROXY_FLAG_FILE) || @file_put_contents(CF_PROXY_FLAG_FILE, date('c')) !== false;
     }
 
-    /** Did the current request come through Cloudflare? (for the Integrations card) */
+    /**
+     * How the current request reached the app (for the Integrations card):
+     * mode 'app'    - came from a Cloudflare IP, the app swapped in the real visitor IP (switch on)
+     *      'server' - Cloudflare headers present and the web server already gives the real IP (mod_remoteip)
+     *      'edge'   - came from a Cloudflare IP, switch off (REMOTE_ADDR is still Cloudflare's)
+     *      'header' - Cloudflare headers present but the sender is not in the Cloudflare ranges
+     *      'none'   - no Cloudflare headers: opened directly
+     * ip = the IP the app uses for this request, edge = the address that connected (when different).
+     */
+    function cloudflare_request_info(): array
+    {
+        $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+        $header = trim((string) ($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''));
+        if (!empty($_SERVER['CF_EDGE_ADDR'])) {
+            return ['mode' => 'app', 'ip' => $ip, 'edge' => (string) $_SERVER['CF_EDGE_ADDR']];
+        }
+        if ($header === '' && empty($_SERVER['HTTP_CF_RAY'])) {
+            return ['mode' => 'none', 'ip' => $ip, 'edge' => ''];
+        }
+        if ($header !== '' && $header === $ip) {
+            return ['mode' => 'server', 'ip' => $ip, 'edge' => ''];
+        }
+        return ['mode' => cf_is_cloudflare_ip($ip) ? 'edge' : 'header', 'ip' => $ip, 'edge' => $ip];
+    }
+
     function cloudflare_request_detected(): bool
     {
-        if (!empty($_SERVER['CF_EDGE_ADDR'])) {
-            return true;
-        }
-        return !empty($_SERVER['HTTP_CF_CONNECTING_IP']) && cf_is_cloudflare_ip((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+        return cloudflare_request_info()['mode'] !== 'none';
     }
 }
 
