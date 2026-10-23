@@ -1155,7 +1155,34 @@ if (isset($_SESSION['auth_user'], $_SESSION['timeout_duration'], $_SESSION['last
     // Security badges in the page footer: how this session signed in (Microsoft / Google 2FA)
     // and whether this page came through Cloudflare (App Settings > Integrations)
     $securityBadges = [];
+    // The account's 2FA method (App Settings > Microsoft Sign In / Google Authenticator), not only the
+    // sign-in that started this session: $_SESSION['login_method'] is set by the Microsoft / Google
+    // sign-in but is gone after a "remember me" sign-in, so the badge stays until the method is changed.
+    // Re-checked every 5 minutes (cached in the session).
     $sessionLoginMethod = (string) ($_SESSION['login_method'] ?? '');
+    $twoFactorCache = $_SESSION['security_badge_2fa'] ?? null;
+    if (!is_array($twoFactorCache) || !isset($twoFactorCache['methods']) || (int) ($twoFactorCache['at'] ?? 0) < time() - 300) {
+        $accountMethods = [];
+        try {
+            require_once __DIR__ . '/two_factor.php';
+            $badgeIqama = (string) ($_SESSION['auth_user']['user_id'] ?? '');
+            if ($badgeIqama !== '' && ($user_type ?? '') !== 'employee') {
+                if (msauth_enabled($conDB) && msauth_user_assigned($conDB, $badgeIqama)) {
+                    $accountMethods[] = 'microsoft';
+                }
+                if (gauth_enabled($conDB) && gauth_user_assigned($conDB, $badgeIqama) && gauth_user_enrolled($conDB, $badgeIqama)) {
+                    $accountMethods[] = 'google';
+                }
+            }
+        } catch (Throwable $e) {
+            $accountMethods = [];
+        }
+        $twoFactorCache = ['methods' => $accountMethods, 'at' => time()];
+        $_SESSION['security_badge_2fa'] = $twoFactorCache;
+    }
+    $accountMethods = (array) $twoFactorCache['methods'];
+    // Method used for this sign-in while it is still on the account; otherwise the account's first method
+    $sessionLoginMethod = in_array($sessionLoginMethod, $accountMethods, true) ? $sessionLoginMethod : (string) ($accountMethods[0] ?? '');
     if ($sessionLoginMethod === 'microsoft') {
         $securityBadges[] = ['ms', __('security_badge_microsoft', 'Signed in with Microsoft (2FA)'), __('security_badge_2fa_caption', '2FA sign-in'), 'Microsoft',
             '<span class="ssd-ms-logo" aria-hidden="true"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>'];
